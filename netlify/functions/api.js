@@ -1,7 +1,10 @@
 /**
- * Netlify Function — API Handler Adapter
+ * Netlify Function — API Handler Adapter (deploy build: 20260812-v4-forcerebuild)
  * 将 Netlify 的 event/context 格式适配到 Node.js req/res 格式
- * 然后委托给 __db_server_cloud.cjs 的 handler 处理
+ * 然后委托给 __db_server_cloud.cjs 的 serverListener 处理
+ * 
+ * 重要说明：此文件每修改一次，Netlify 才会重新 ZIP 打包 Function bundle。
+ * 所以当 __db_server_cloud.cjs 有重大代码变更时，记得在此文件改版本戳。
  */
 const { Readable } = require('stream');
 const serverHandler = require('../../__db_server_cloud.cjs');
