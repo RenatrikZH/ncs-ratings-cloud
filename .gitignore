@@ -8,3 +8,8 @@ __watchdog.log
 __current_tunnel_url.txt
 .env
 *.log
+
+.vercel
+
+# Local Netlify folder
+.netlify

@@ -2,7 +2,10 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover,maximum-scale=5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0a0f">
 <title>NCS Ratings · NoCopyrightSounds 歌曲评分榜</title>
 <style>
 /* ============================================================
@@ -18,6 +21,11 @@
   --sidebar-w:260px;
   --player-h:86px;
   --top-h:60px;
+  --vh:1vh; /* 动态视口高度，JS 更新此值修复 iOS Safari 黑屏 */
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bottom:env(safe-area-inset-bottom,0px);
+  --safe-left:env(safe-area-inset-left,0px);
+  --safe-right:env(safe-area-inset-right,0px);
 
   /* 暖深色基底 */
   --bg:#0a0a0b;
@@ -88,7 +96,10 @@ img{display:block;max-width:100%;-webkit-user-drag:none}
   grid-template-columns:var(--sidebar-w) 1fr;
   grid-template-rows:1fr var(--player-h);
   height:100vh;
-  height:100dvh; /* 动态视口高度，修复移动端地址栏导致的黑屏 */
+  height:calc(var(--vh,1vh) * 100); /* 使用 --vh 变量修复 iOS Safari 黑屏 */
+  height:100dvh;
+  min-height:100vh;
+  min-height:calc(var(--vh,1vh) * 100);
   gap:0;
   padding:0;
 }
@@ -1468,13 +1479,21 @@ tr:hover td{background:rgba(255,255,255,0.02)}
     'orient-' + orient
   ].filter(Boolean).join(' ');
 
-  // 修复 iOS Safari 100vh 问题：动态设置 CSS 变量
+  // 修复 iOS Safari 100vh 黑屏问题：动态设置 CSS 变量
   function setVH(){
     document.documentElement.style.setProperty('--vh', window.innerHeight * 0.01 + 'px');
+    // iOS Safari 兼容：强制设置 body 高度
+    if(isIOS){ document.body.style.height = window.innerHeight + 'px'; }
   }
   setVH();
-  window.addEventListener('resize', setVH);
+  // 防抖：避免频繁触发
+  var resizeTimer;
+  window.addEventListener('resize', function(){ clearTimeout(resizeTimer); resizeTimer = setTimeout(setVH, 100); });
   window.addEventListener('orientationchange', function(){ setTimeout(setVH, 200); });
+  // iOS Safari 从后台切回时重新计算
+  document.addEventListener('visibilitychange', function(){
+    if(!document.hidden){ setTimeout(setVH, 300); }
+  });
 
   // 阻止双击缩放（移动端更接近原生 App 体验）
   let lastTouch = 0;
@@ -1510,6 +1529,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <a data-view="newest"><span class="ico">🆕</span>最新入库</a>
       <a data-view="worst"><span class="ico">⚔️</span>争议歌曲榜</a>
       <a data-view="search-view"><span class="ico">🔍</span>搜索筛选</a>
+      <a data-view="community"><span class="ico">🌐</span>社区讨论</a>
     </nav>
     <div class="nav-sep"></div>
     <div class="nav-title">我的音乐库</div>
@@ -1551,6 +1571,7 @@ tr:hover td{background:rgba(255,255,255,0.02)}
           </div>
           <div class="dropdown" id="userMenu">
             <a id="gotoProfile">👤 个人设置</a>
+            <a id="gotoFeedback">📮 反馈建议</a>
             <a id="gotoAdmin">📈 后台管理</a>
             <div class="sep"></div>
             <a id="btnLogin">🔐 登录账号</a>
@@ -1655,11 +1676,15 @@ tr:hover td{background:rgba(255,255,255,0.02)}
         <div class="field"><label>设置密码</label><input id="regPass" type="password" required minlength="4" maxlength="40" placeholder="至少 4 个字符"></div>
         <div class="field"><label>确认密码</label><input id="regPass2" type="password" required maxlength="40"></div>
         <div class="field">
-          <label>🎫 每日邀请码</label>
-          <input id="regCode" required maxlength="25" placeholder="XXXX-XXXX-XXXX-XXXX（请使用离线查看器获取）">
+          <label>🔐 图形验证码</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="regCode" required maxlength="4" placeholder="输入右侧验证码" style="flex:1;text-transform:uppercase;letter-spacing:2px">
+            <div id="captchaImg" onclick="App.loadCaptcha()" style="cursor:pointer;width:160px;height:50px;border-radius:8px;overflow:hidden;background:var(--bg-2);border:1px solid var(--bg-3);display:flex;align-items:center;justify-content:center;flex-shrink:0" title="点击刷新验证码">
+              <span style="color:var(--text-4);font-size:11px">点击加载</span>
+            </div>
+          </div>
           <div style="margin-top:6px;font-size:11px;color:var(--text-4);line-height:1.6">
-            💡 邀请码每天自动更换，格式不区分大小写，连字符可省略。<br>
-            打开 <b>__daily_code_viewer.html</b>（离线专用，无需联网）即可查看当日密码。
+            💡 输入图片中的4位验证码（不区分大小写），点击图片可刷新
           </div>
         </div>
         <button type="submit" class="btn btn-accent" style="justify-content:center;height:44px;font-size:14px;border-radius:12px">创建账号</button>
@@ -1687,6 +1712,35 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <button class="modal-close" data-close="adminModal">✕</button>
     </div>
     <div class="modal-body" id="adminBody"></div>
+  </div>
+</div>
+
+<!-- 反馈弹窗 -->
+<div class="overlay" id="feedbackModal">
+  <div class="modal" style="width:min(560px,96vw)">
+    <div class="modal-head">
+      <h2>📮 反馈建议</h2>
+      <button class="modal-close" data-close="feedbackModal">✕</button>
+    </div>
+    <div class="modal-body" style="padding:20px">
+      <div id="feedbackForm" style="display:flex;flex-direction:column;gap:14px">
+        <div>
+          <label style="font-size:13px;font-weight:700;color:var(--text-2)">反馈内容</label>
+          <textarea id="feedbackMsg" rows="5" maxlength="1000" placeholder="请输入您的反馈或建议（最多1000字）..." style="width:100%;margin-top:6px;padding:10px 14px;border-radius:10px;border:1px solid var(--bg-3);background:var(--bg-2);color:var(--text-1);font-size:14px;resize:vertical;font-family:inherit"></textarea>
+          <div style="text-align:right;font-size:11px;color:var(--text-4);margin-top:4px"><span id="feedbackCount">0</span>/1000</div>
+        </div>
+        <div>
+          <label style="font-size:13px;font-weight:700;color:var(--text-2)">附件（可选，限500KB）</label>
+          <input type="file" id="feedbackFile" style="margin-top:6px;width:100%;font-size:13px;color:var(--text-3)" accept="image/*,.pdf,.txt,.zip,.doc,.docx">
+          <div id="feedbackFileHint" style="font-size:11px;color:var(--text-4);margin-top:4px">支持图片、PDF、TXT等文件</div>
+        </div>
+        <button class="btn btn-primary" id="btnSubmitFeedback" style="padding:12px;font-size:15px;border-radius:10px;border:none;cursor:pointer;background:var(--accent);color:#fff;font-weight:700">📤 提交反馈</button>
+      </div>
+      <div id="feedbackHistory" style="margin-top:20px;border-top:1px solid var(--bg-3);padding-top:16px">
+        <h3 style="font-size:14px;font-weight:700;color:var(--text-2);margin-bottom:10px">📋 我的反馈记录</h3>
+        <div id="feedbackList" style="display:flex;flex-direction:column;gap:10px"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1756,9 +1810,21 @@ const API = {
     if(this.online){ el.className="db-status online"; el.innerHTML='<span class="db-dot"></span> 数据库已连接'; }
     else { el.className="db-status offline"; el.innerHTML='<span class="db-dot"></span> 本地模式'; }
   },
-  async register(name, pass, inviteCode){
+  async register(name, pass, captchaCode){
     // 使用 _fetchRaw 以获取服务器返回的具体错误（如"用户名已存在"）
-    return await this._fetchRaw("/api/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:name,password:pass,inviteCode:inviteCode||""})});
+    return await this._fetchRaw("/api/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:name,password:pass,captchaId:this._captchaId||"",captchaCode:captchaCode||""})});
+  },
+  // 加载图形验证码
+  async loadCaptcha(){
+    try{
+      const r=await fetch(`${API_BASE}/api/captcha`);
+      const data=await r.json();
+      if(data.svg){
+        this._captchaId=data.id;
+        const img=$("#captchaImg");
+        if(img){img.innerHTML=data.svg;}
+      }
+    }catch(e){/* ignore */}
   },
   async login(name, pass){
     // 使用 _fetchRaw 以获取服务器返回的具体错误（如"用户名或密码错误"）
@@ -2306,6 +2372,7 @@ const app = {
         a.classList.add("active");
         this.view = a.dataset.view;
         if(this.view === "search-view"){ this.view="home"; $("#searchInput")&&$("#searchInput").focus(); }
+        if(this.view === "community"){ this.renderCommunity(); return; }
         this.renderHome();
       };
     });
@@ -2316,10 +2383,13 @@ const app = {
     };
     document.addEventListener("click", ()=>{ this.userOpen = false; $("#userMenu").classList.remove("open"); });
     $("#btnLogin").onclick = ()=> this.openModal("loginModal");
-    $("#btnRegister").onclick = ()=> this.openModal("registerModal");
+    $("#btnRegister").onclick = ()=> { this.openModal("registerModal"); this.loadCaptcha(); };
     $("#btnLogout").onclick = ()=> this.logout();
     $("#gotoProfile").onclick = ()=> this.openProfile();
+    $("#gotoFeedback").onclick = ()=> this.openFeedback();
     $("#gotoAdmin").onclick = ()=> this.openAdmin();
+    $("#btnSubmitFeedback").onclick = ()=> this.submitFeedback();
+    $("#feedbackMsg").addEventListener("input", e=>{ $("#feedbackCount").textContent = e.target.value.length; });
     $("#searchInput").addEventListener("input", e=>{
       this.view = "search"; this.renderHome(e.target.value.trim());
     });
@@ -2741,9 +2811,9 @@ const app = {
     if(p !== p2){ showToast("❌ 两次输入的密码不一致",2200); return; }
     if(u.length < 2){ showToast("❌ 用户名至少2个字符",2200); return; }
     if(p.length < 4){ showToast("❌ 密码至少4个字符",2200); return; }
-    if(!code){ showToast("❌ 请输入每日邀请码",2200); return; }
+    if(!code){ showToast("❌ 请输入验证码",2200); return; }
     showToast("⏳ 正在注册...",1200);
-    // 先走服务器 API 注册（服务端防重名 + 验证邀请码）
+    // 先走服务器 API 注册（服务端防重名 + 验证码验证）
     const apiRes = await API.register(u, p, code);
     if(apiRes && apiRes.success){
       // 服务器注册成功，同步到本地缓存
@@ -2755,9 +2825,12 @@ const app = {
       $("#regPass").value=""; $("#regPass2").value=""; $("#regCode").value="";
       showToast("🎉 注册成功，欢迎 "+esc(user.name)+"！", 2500); this.renderHome();
     } else {
-      // 服务器注册失败（可能是重名或邀请码错误）
+      // 服务器注册失败（可能是重名或验证码错误）
       const msg = apiRes && apiRes.error ? apiRes.error : "注册失败";
       showToast("❌ "+msg, 2500);
+      // 注册失败后刷新验证码
+      this.loadCaptcha();
+      $("#regCode").value="";
     }
   },
   logout(){
@@ -2860,6 +2933,152 @@ const app = {
     });
     const cs = Comments.get().filter(c=> c.user.toLowerCase() === u.name.toLowerCase()).length;
     showToast(`📊 你已评分 ${likes+dislikes} 首（👍 ${likes} / 👎 ${dislikes}），评论 ${cs} 条`, 4800);
+  },
+
+  // ========== FEEDBACK (反馈系统) ==========
+  openFeedback(){
+    const u = Session.get();
+    if(!u){ showToast("🔐 请先登录",2200); this.openModal("loginModal"); return; }
+    $("#feedbackMsg").value=""; $("#feedbackCount").textContent="0";
+    $("#feedbackFile").value="";
+    this.openModal("feedbackModal");
+    this.loadFeedbackHistory();
+  },
+  async loadFeedbackHistory(){
+    const u=Session.get(); if(!u) return;
+    const list=$("#feedbackList");
+    list.innerHTML='<div style="color:var(--text-4);font-size:13px">加载中...</div>';
+    try{
+      const r=await fetch(`${API_BASE}/api/feedback?username=${encodeURIComponent(u.name)}`);
+      const data=await r.json();
+      if(!Array.isArray(data)||data.length===0){list.innerHTML='<div style="color:var(--text-4);font-size:13px">暂无反馈记录</div>';return}
+      list.innerHTML=data.map(f=>{
+        const att=f.attachment_data?(f.attachment_type&&f.attachment_type.startsWith('image')?
+          `<img src="${f.attachment_data}" style="max-width:200px;max-height:150px;border-radius:8px;margin-top:6px;cursor:pointer" onclick="window.open(this.src)" />`:
+          `<a href="${f.attachment_data}" download="${f.attachment_name||'file'}" style="color:var(--accent);font-size:12px">📎 ${f.attachment_name||'附件'}</a>`):'';
+        const reply=f.admin_reply?`<div style="margin-top:6px;padding:8px 12px;background:rgba(34,197,94,0.08);border-radius:8px;border-left:3px solid #4ade80;font-size:12px"><b style="color:#4ade80">管理员回复：</b>${f.admin_reply}</div>`:'';
+        return `<div style="background:var(--bg-2);padding:12px;border-radius:10px;border:1px solid var(--bg-3)">
+          <div style="font-size:13px;color:var(--text-1);line-height:1.6">${f.message}</div>
+          ${att}
+          ${reply}
+          <div style="font-size:10px;color:var(--text-4);margin-top:6px">${f.created_at}${f.replied_at?' · 已回复':''}</div>
+        </div>`;
+      }).join('');
+    }catch(e){list.innerHTML='<div style="color:var(--text-4);font-size:13px">加载失败</div>'}
+  },
+  async submitFeedback(){
+    const u=Session.get(); if(!u){showToast("🔐 请先登录",2200);return}
+    const msg=$("#feedbackMsg").value.trim();
+    if(!msg){showToast("❌ 请输入反馈内容",2200);return}
+    if(msg.length>1000){showToast("❌ 反馈内容不能超过1000字",2200);return}
+    const btn=$("#btnSubmitFeedback");
+    btn.disabled=true; btn.textContent="提交中...";
+    let attachmentData=null,attachmentName=null,attachmentType=null;
+    const fileInput=$("#feedbackFile");
+    if(fileInput.files&&fileInput.files[0]){
+      const file=fileInput.files[0];
+      if(file.size>500*1024){showToast("❌ 附件不能超过500KB",2200);btn.disabled=false;btn.textContent="📤 提交反馈";return}
+      attachmentName=file.name; attachmentType=file.type;
+      attachmentData=await new Promise(res=>{const r=new FileReader();r.onload=()=>res(r.result);r.readAsDataURL(file);});
+    }
+    try{
+      const r=await fetch(`${API_BASE}/api/feedback`,{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({username:u.name,message:msg,attachmentData,attachmentName,attachmentType})
+      });
+      const data=await r.json();
+      if(data.error){showToast("❌ "+data.error,2200);return}
+      showToast("✅ 反馈已提交，管理员会尽快回复",3000);
+      $("#feedbackMsg").value="";$("#feedbackCount").textContent="0";$("#feedbackFile").value="";
+      this.loadFeedbackHistory();
+    }catch(e){showToast("❌ 网络错误",2200)}
+    finally{btn.disabled=false;btn.textContent="📤 提交反馈";}
+  },
+
+  // ========== COMMUNITY (社区模块) ==========
+  async renderCommunity(){
+    const ca=$("#contentArea");
+    ca.innerHTML=`<div style="padding:20px 28px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <h2 style="font-size:22px;font-weight:800;color:var(--text-1)">🌐 社区讨论</h2>
+        <button class="btn btn-primary" id="btnNewPost" style="padding:8px 16px;border-radius:8px;border:none;cursor:pointer;background:var(--accent);color:#fff;font-weight:700;font-size:13px">✏️ 发帖</button>
+      </div>
+      <div id="communityPostBox" style="display:none;background:var(--bg-2);padding:16px;border-radius:12px;border:1px solid var(--bg-3);margin-bottom:20px">
+        <textarea id="postContent" rows="3" maxlength="300" placeholder="说点什么吧...（最多300字）" style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid var(--bg-3);background:var(--bg-1);color:var(--text-1);font-size:14px;resize:vertical;font-family:inherit"></textarea>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="file" id="postFile" accept="image/*,.pdf,.txt,.zip,.doc,.docx" style="font-size:12px;color:var(--text-3)">
+            <span style="font-size:11px;color:var(--text-4)"><span id="postCount">0</span>/300</span>
+          </div>
+          <button class="btn btn-primary" id="btnSubmitPost" style="padding:8px 20px;border-radius:8px;border:none;cursor:pointer;background:var(--accent);color:#fff;font-weight:700;font-size:13px">发布</button>
+        </div>
+      </div>
+      <div id="communityList" style="display:flex;flex-direction:column;gap:12px">
+        <div style="text-align:center;padding:40px;color:var(--text-4)">加载中...</div>
+      </div>
+    </div>`;
+    $("#btnNewPost").onclick=()=>{
+      const u=Session.get();
+      if(!u){showToast("🔐 请先登录再发帖",2200);this.openModal("loginModal");return}
+      const box=$("#communityPostBox");
+      box.style.display=box.style.display==="none"?"block":"none";
+    };
+    $("#postContent").addEventListener("input",e=>{$("#postCount").textContent=e.target.value.length;});
+    $("#btnSubmitPost").onclick=()=>this.submitCommunityPost();
+    await this.loadCommunityPosts();
+  },
+  async loadCommunityPosts(){
+    const list=$("#communityList"); if(!list) return;
+    try{
+      const r=await fetch(`${API_BASE}/api/community/posts`);
+      const data=await r.json();
+      if(!Array.isArray(data)||data.length===0){list.innerHTML='<div style="text-align:center;padding:40px;color:var(--text-4)">暂无帖子，快来发第一条吧！</div>';return}
+      list.innerHTML=data.map(p=>{
+        const att=p.attachment_data?(p.attachment_type&&p.attachment_type.startsWith('image')?
+          `<img src="${p.attachment_data}" style="max-width:300px;max-height:200px;border-radius:8px;margin-top:8px;cursor:pointer" onclick="window.open(this.src)" />`:
+          `<a href="${p.attachment_data}" download="${p.attachment_name||'file'}" style="color:var(--accent);font-size:12px;display:inline-block;margin-top:6px">📎 ${p.attachment_name||'附件'}</a>`):'';
+        const avatar=(p.username||'?').charAt(0).toUpperCase();
+        return `<div style="background:var(--bg-2);padding:16px;border-radius:12px;border:1px solid var(--bg-3)">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <div style="width:36px;height:36px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px">${avatar}</div>
+            <div>
+              <div style="font-weight:700;color:var(--text-1);font-size:14px">${p.username}</div>
+              <div style="font-size:11px;color:var(--text-4)">${p.created_at}</div>
+            </div>
+          </div>
+          <div style="font-size:14px;color:var(--text-2);line-height:1.7;white-space:pre-wrap;word-break:break-word">${(p.content||'').replace(/</g,'&lt;')}</div>
+          ${att}
+        </div>`;
+      }).join('');
+    }catch(e){list.innerHTML='<div style="text-align:center;padding:40px;color:var(--text-4)">加载失败，请检查网络</div>'}
+  },
+  async submitCommunityPost(){
+    const u=Session.get(); if(!u){showToast("🔐 请先登录",2200);return}
+    const content=$("#postContent").value.trim();
+    if(!content){showToast("❌ 请输入内容",2200);return}
+    if(content.length>300){showToast("❌ 内容不能超过300字",2200);return}
+    const btn=$("#btnSubmitPost"); btn.disabled=true; btn.textContent="发布中...";
+    let attachmentData=null,attachmentName=null,attachmentType=null;
+    const fileInput=$("#postFile");
+    if(fileInput.files&&fileInput.files[0]){
+      const file=fileInput.files[0];
+      if(file.size>500*1024){showToast("❌ 附件不能超过500KB",2200);btn.disabled=false;btn.textContent="发布";return}
+      attachmentName=file.name; attachmentType=file.type;
+      attachmentData=await new Promise(res=>{const r=new FileReader();r.onload=()=>res(r.result);r.readAsDataURL(file);});
+    }
+    try{
+      const r=await fetch(`${API_BASE}/api/community/post`,{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({username:u.name,content,attachmentData,attachmentName,attachmentType})
+      });
+      const data=await r.json();
+      if(data.error){showToast("❌ "+data.error,2200);return}
+      showToast("✅ 发布成功",2000);
+      $("#postContent").value="";$("#postCount").textContent="0";$("#postFile").value="";
+      $("#communityPostBox").style.display="none";
+      this.loadCommunityPosts();
+    }catch(e){showToast("❌ 网络错误",2200)}
+    finally{btn.disabled=false;btn.textContent="发布";}
   },
 
   // ========== ADMIN ==========

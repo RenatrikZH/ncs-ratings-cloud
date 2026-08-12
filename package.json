@@ -1,11 +1,12 @@
 {
   "name": "ncs-ratings-server",
-  "version": "2.0.0",
-  "description": "NCS Ratings Cloud Server - Turso + Render",
+  "version": "3.0.0",
+  "description": "NCS Ratings Cloud Server - Turso + Vercel Serverless",
   "main": "__db_server_cloud.cjs",
   "scripts": {
     "start": "node __db_server_cloud.cjs",
-    "dev": "node __db_server_cloud.cjs"
+    "dev": "node __db_server_cloud.cjs",
+    "vercel-build": "echo 'No build needed - static files + serverless functions'"
   },
   "engines": {
     "node": ">=18"

@@ -14,7 +14,9 @@
  * Env:    TURSO_URL, TURSO_TOKEN, PORT
  */
 
-const { createClient } = require('@libsql/client');
+// 使用 HTTP 模式，避免依赖平台特定的原生二进制模块（@libsql/linux-x64-gnu 等）
+// HTTP 模式通过 Turso 的 HTTP API 连接，在 Netlify/Vercel 等 Serverless 环境中更稳定
+const { createClient } = require('@libsql/client/http');
 const http = require('node:http');
 const crypto = require('node:crypto');
 const url = require('node:url');
@@ -92,6 +94,28 @@ const SCHEMA_SQL = `
     user_agent TEXT,
     created_at TEXT DEFAULT (datetime('now'))
   );
+  CREATE TABLE IF NOT EXISTS feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    message TEXT NOT NULL,
+    attachment_data TEXT,
+    attachment_name TEXT,
+    attachment_type TEXT,
+    admin_reply TEXT,
+    replied_at TEXT,
+    ip TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS community_posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    content TEXT NOT NULL,
+    attachment_data TEXT,
+    attachment_name TEXT,
+    attachment_type TEXT,
+    ip TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  );
   CREATE INDEX IF NOT EXISTS idx_ratings_audio ON ratings(audio_url);
   CREATE INDEX IF NOT EXISTS idx_comments_audio ON comments(audio_url);
   CREATE INDEX IF NOT EXISTS idx_playlogs_audio ON play_logs(audio_url);
@@ -101,6 +125,9 @@ const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages(receiver);
   CREATE INDEX IF NOT EXISTS idx_loginlogs_user ON login_logs(username);
   CREATE INDEX IF NOT EXISTS idx_syslogs_action ON system_logs(action);
+  CREATE INDEX IF NOT EXISTS idx_feedback_user ON feedback(username);
+  CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at);
+  CREATE INDEX IF NOT EXISTS idx_community_created ON community_posts(created_at);
 `;
 
 // ============ SCHEMA MIGRATION (为旧库添加新列) ============
@@ -125,10 +152,77 @@ function hashPwd(pwd) {
   return crypto.createHash('sha256').update(pwd + SALT).digest('hex');
 }
 
-// ============ 每日动态密码（邀请码）算法 ============
-// 密钥 — 与离线查看器保持一致，改这里同时要改 __daily_code_viewer.html
-const DAILY_CODE_SECRET = 'NCS-DAILY-CODE-SECRET-2026-v1-神级后台专属密钥';
-const BASE32_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 去掉 I O 0 1 易混字符
+// ============ 图形验证码系统（无状态签名，兼容 Serverless） ============
+// 使用 HMAC-SHA256 签名令牌，无需内存存储，适配 Netlify/Vercel 等 Serverless 环境
+const CAPTCHA_SECRET = SALT + '_captcha_v1';
+const CAPTCHA_EXPIRE = 5 * 60 * 1000; // 5分钟有效期
+
+function generateCaptcha() {
+  // 生成4位验证码（排除易混字符 I O 0 1）
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 4; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  // 无状态令牌：base64(code:timestamp).hmac签名
+  const ts = Date.now();
+  const payload = Buffer.from(code + ':' + ts).toString('base64');
+  const sig = crypto.createHmac('sha256', CAPTCHA_SECRET).update(payload).digest('hex');
+  return { token: payload + '.' + sig, code };
+}
+// 生成 SVG 验证码图片（纯文本，无需 Canvas/canvas 库）
+function generateCaptchaSVG(code) {
+  const colors = ['#22c55e', '#3b82f6', '#a855f7', '#f59e0b', '#ef4444', '#06b6d4'];
+  // 干扰线
+  let lines = '';
+  for (let i = 0; i < 6; i++) {
+    const x1 = Math.random() * 160, y1 = Math.random() * 50;
+    const x2 = Math.random() * 160, y2 = Math.random() * 50;
+    const lc = colors[Math.floor(Math.random() * colors.length)];
+    lines += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${lc}" stroke-width="1" opacity="0.3"/>`;
+  }
+  // 干扰点
+  let dots = '';
+  for (let i = 0; i < 30; i++) {
+    dots += `<circle cx="${Math.random() * 160}" cy="${Math.random() * 50}" r="1" fill="${colors[Math.floor(Math.random() * colors.length)]}" opacity="0.4"/>`;
+  }
+  // 每个字符随机旋转、偏移
+  let text = '';
+  for (let i = 0; i < code.length; i++) {
+    const x = 20 + i * 35;
+    const y = 35 + (Math.random() - 0.5) * 10;
+    const rot = (Math.random() - 0.5) * 30;
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    text += `<text x="${x}" y="${y}" font-size="28" font-family="monospace" font-weight="bold" fill="${color}" transform="rotate(${rot} ${x} ${y})">${code[i]}</text>`;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="50" viewBox="0 0 160 50">
+    <rect width="160" height="50" fill="#1a1a20" rx="8"/>
+    ${lines}${dots}${text}
+  </svg>`;
+}
+function verifyCaptcha(token, input) {
+  if (!token || !input) return false;
+  try {
+    const parts = String(token).split('.');
+    if (parts.length !== 2) return false;
+    const [payload, sig] = parts;
+    // 验证签名
+    const expectedSig = crypto.createHmac('sha256', CAPTCHA_SECRET).update(payload).digest('hex');
+    if (sig !== expectedSig) return false;
+    // 解码 payload
+    const decoded = Buffer.from(payload, 'base64').toString('utf8');
+    const colonIdx = decoded.lastIndexOf(':');
+    if (colonIdx < 1) return false;
+    const code = decoded.slice(0, colonIdx);
+    const ts = parseInt(decoded.slice(colonIdx + 1), 10);
+    // 检查过期
+    if (isNaN(ts) || Date.now() - ts > CAPTCHA_EXPIRE) return false;
+    // 比对验证码（不区分大小写）
+    return code === String(input).toUpperCase();
+  } catch (e) {
+    return false;
+  }
+}
 
 // 获取上海时区的日期字符串 YYYY-MM-DD
 function getShanghaiDate() {
@@ -139,46 +233,6 @@ function getShanghaiDate() {
   const m = String(shanghai.getUTCMonth() + 1).padStart(2, '0');
   const d = String(shanghai.getUTCDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
-}
-
-// 根据日期生成 16 位邀请码（格式 XXXX-XXXX-XXXX-XXXX）
-function generateDailyCode(dateStr) {
-  const hmac = crypto.createHmac('sha256', DAILY_CODE_SECRET);
-  hmac.update(dateStr || getShanghaiDate());
-  const hash = hmac.digest();
-  // 取前 10 字节（80 bit）→ Base32 编码正好 16 字符
-  let code = '';
-  for (let i = 0; i < 10; i++) {
-    const byte = hash[i];
-    // 每个字节拆成 5 bit 组（前 2 组用本字节，第 3 组跨字节）
-    // 但为了简单，我们对 10 字节做 80/5=16 次 5-bit 提取
-  }
-  // 重写：用位运算提取 16 组 5-bit
-  let bitPos = 0;
-  let byteIdx = 0;
-  for (let i = 0; i < 16; i++) {
-    let val = 0;
-    for (let b = 0; b < 5; b++) {
-      val <<= 1;
-      const byte = hash[byteIdx];
-      const bit = (byte >> (7 - bitPos)) & 1;
-      val |= bit;
-      bitPos++;
-      if (bitPos >= 8) { bitPos = 0; byteIdx++; }
-    }
-    code += BASE32_CHARS[val & 31];
-  }
-  // 格式化为 XXXX-XXXX-XXXX-XXXX
-  return code.slice(0, 4) + '-' + code.slice(4, 8) + '-' + code.slice(8, 12) + '-' + code.slice(12, 16);
-}
-
-// 校验邀请码（去除空格、连字符，不区分大小写）
-function verifyDailyCode(input) {
-  if (!input) return false;
-  const clean = String(input).toUpperCase().replace(/[\s\-]/g, '');
-  if (clean.length !== 16) return false;
-  const todayCode = generateDailyCode().replace(/-/g, '');
-  return clean === todayCode;
 }
 
 function sendJSON(res, data, status) {
@@ -264,28 +318,35 @@ async function apiHealth(req, res) {
   sendJSON(res, { ok: true, time: new Date().toISOString(), db: TURSO_URL });
 }
 
-// 公开接口：返回今日日期（不返回密码，密码只能离线查看）
+// 公开接口：返回今日日期
 async function apiDailyInfo(req, res) {
   const date = getShanghaiDate();
-  sendJSON(res, { date, hint: '请使用离线密码查看器获取今日邀请码，格式 XXXX-XXXX-XXXX-XXXX' });
+  sendJSON(res, { date, hint: '注册时请输入图形验证码' });
+}
+
+// 生成图形验证码（返回 SVG 图片 + 签名令牌）
+async function apiCaptcha(req, res) {
+  const { token, code } = generateCaptcha();
+  const svg = generateCaptchaSVG(code);
+  sendJSON(res, { id: token, svg });
 }
 
 async function apiRegister(req, res) {
-  const { username, password, inviteCode } = await readBody(req);
+  const { username, password, captchaId, captchaCode } = await readBody(req);
   const ip = getIP(req);
   if (!username || !password) return sendJSON(res, { error: '用户名和密码不能为空' }, 400);
   if (username.length < 2) return sendJSON(res, { error: '用户名至少2个字符' }, 400);
-  // 校验当日邀请码
-  if (!verifyDailyCode(inviteCode)) {
-    logSystem('WARN', 'REGISTER_CODE_FAIL', username, '邀请码错误或已过期', ip);
-    return sendJSON(res, { error: '邀请码错误或已过期，请使用离线查看器获取当日最新密码' }, 403);
+  // 验证图形验证码（无状态签名令牌）
+  if (!verifyCaptcha(captchaId, captchaCode)) {
+    logSystem('WARN', 'REGISTER_CAPTCHA_FAIL', username, '验证码错误或已过期', ip);
+    return sendJSON(res, { error: '验证码错误或已过期，请刷新验证码重试' }, 403);
   }
   try {
     await db.execute({
       sql: 'INSERT INTO users (username, password_hash) VALUES (?, ?)',
       args: [username, hashPwd(password)]
     });
-    logSystem('INFO', 'REGISTER', username, '新用户注册（邀请码验证通过）', ip);
+    logSystem('INFO', 'REGISTER', username, '新用户注册（验证码验证通过）', ip);
     sendJSON(res, { success: true, user: { name: username, joined: new Date().toISOString() } });
   } catch (e) {
     if (String(e).includes('UNIQUE')) {
@@ -525,6 +586,74 @@ async function apiSync(req, res) {
   } catch (e) {
     sendJSON(res, { error: 'Sync failed: ' + e.message }, 500);
   }
+}
+
+// ============ 反馈系统 API ============
+// 用户提交反馈（支持图片/文件 base64 附件，限制 500KB）
+async function apiSubmitFeedback(req, res) {
+  const { username, message, attachmentData, attachmentName, attachmentType } = await readBody(req);
+  const ip = getIP(req);
+  if (!username || !message) return sendJSON(res, { error: '用户名和反馈内容不能为空' }, 400);
+  if (message.length > 1000) return sendJSON(res, { error: '反馈内容不能超过1000字' }, 400);
+  // 限制附件大小 500KB（base64 约 670KB）
+  if (attachmentData && attachmentData.length > 700000) {
+    return sendJSON(res, { error: '附件过大，请限制在500KB以内' }, 400);
+  }
+  try {
+    await db.execute({
+      sql: 'INSERT INTO feedback (username, message, attachment_data, attachment_name, attachment_type, ip) VALUES (?, ?, ?, ?, ?, ?)',
+      args: [username, message, attachmentData || null, attachmentName || null, attachmentType || null, ip]
+    });
+    logSystem('INFO', 'FEEDBACK_SUBMIT', username, '用户提交反馈', ip);
+    sendJSON(res, { success: true, message: '反馈已提交，管理员会尽快回复' });
+  } catch (e) {
+    sendJSON(res, { error: '提交失败: ' + e.message }, 500);
+  }
+}
+
+// 用户查看自己的反馈及管理员回复
+async function apiGetFeedback(req, res) {
+  const parsed = url.parse(req.url, true);
+  const username = parsed.query.username;
+  if (!username) return sendJSON(res, { error: '缺少用户名参数' }, 400);
+  const result = await db.execute({
+    sql: 'SELECT id, message, attachment_data, attachment_name, attachment_type, admin_reply, replied_at, created_at FROM feedback WHERE username = ? ORDER BY created_at DESC LIMIT 100',
+    args: [username]
+  });
+  sendJSON(res, result.rows);
+}
+
+// ============ 社区模块 API ============
+// 用户发帖（内容不超过300字，支持图片/文件附件）
+async function apiCommunityPost(req, res) {
+  const { username, content, attachmentData, attachmentName, attachmentType } = await readBody(req);
+  const ip = getIP(req);
+  if (!username || !content) return sendJSON(res, { error: '用户名和内容不能为空' }, 400);
+  if (content.length > 300) return sendJSON(res, { error: '内容不能超过300字' }, 400);
+  if (attachmentData && attachmentData.length > 700000) {
+    return sendJSON(res, { error: '附件过大，请限制在500KB以内' }, 400);
+  }
+  try {
+    await db.execute({
+      sql: 'INSERT INTO community_posts (username, content, attachment_data, attachment_name, attachment_type, ip) VALUES (?, ?, ?, ?, ?, ?)',
+      args: [username, content, attachmentData || null, attachmentName || null, attachmentType || null, ip]
+    });
+    sendJSON(res, { success: true, message: '发布成功' });
+  } catch (e) {
+    sendJSON(res, { error: '发布失败: ' + e.message }, 500);
+  }
+}
+
+// 获取社区帖子列表（显示一年内的信息）
+async function apiCommunityList(req, res) {
+  const result = await db.execute({
+    sql: `SELECT id, username, content, attachment_data, attachment_name, attachment_type, created_at
+          FROM community_posts
+          WHERE created_at >= datetime('now', '-1 year')
+          ORDER BY created_at DESC
+          LIMIT 500`
+  });
+  sendJSON(res, result.rows);
 }
 
 // ============ ADMIN HANDLERS ============
@@ -780,12 +909,56 @@ async function adminExport(req, res) {
   sendJSON(res, { users, ratings, comments, plays, messages, logs, loginLogs, exportedAt: new Date().toISOString() });
 }
 
+// ============ 管理员反馈管理 API ============
+// 查看所有反馈
+async function adminGetFeedback(req, res) {
+  const result = await db.execute({
+    sql: 'SELECT id, username, message, attachment_data, attachment_name, attachment_type, admin_reply, replied_at, ip, created_at FROM feedback ORDER BY created_at DESC LIMIT 500'
+  });
+  sendJSON(res, result.rows);
+}
+// 回复反馈
+async function adminReplyFeedback(req, res) {
+  const { id, reply } = await readBody(req);
+  if (!id || !reply) return sendJSON(res, { error: '缺少反馈ID或回复内容' }, 400);
+  await db.execute({
+    sql: "UPDATE feedback SET admin_reply = ?, replied_at = datetime('now') WHERE id = ?",
+    args: [reply, id]
+  });
+  sendJSON(res, { success: true });
+}
+// 删除反馈
+async function adminDeleteFeedback(req, res) {
+  const { id } = await readBody(req);
+  await db.execute({ sql: 'DELETE FROM feedback WHERE id = ?', args: [id] });
+  sendJSON(res, { success: true });
+}
+
+// ============ 管理员社区管理 API ============
+// 查看所有社区帖子
+async function adminGetCommunity(req, res) {
+  const result = await db.execute({
+    sql: 'SELECT id, username, content, attachment_data, attachment_name, attachment_type, ip, created_at FROM community_posts ORDER BY created_at DESC LIMIT 500'
+  });
+  sendJSON(res, result.rows);
+}
+// 删除社区帖子
+async function adminDeleteCommunity(req, res) {
+  const { id } = await readBody(req);
+  await db.execute({ sql: 'DELETE FROM community_posts WHERE id = ?', args: [id] });
+  sendJSON(res, { success: true });
+}
+
 // ============ ADMIN DASHBOARD HTML ============
 const ADMIN_HTML = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#08080a">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
 <title>NCS Ratings · 超级管理后台</title>
 <style>
 :root{
@@ -794,17 +967,20 @@ const ADMIN_HTML = `<!DOCTYPE html>
   --accent:#22c55e;--accent2:#3b82f6;--red:#ef4444;--yellow:#f59e0b;--purple:#a855f7;--cyan:#06b6d4;
   --bd:rgba(255,255,255,0.08);--bd2:rgba(255,255,255,0.14);--radius:12px;
   --shadow:0 10px 30px -10px rgba(0,0,0,0.6);
+  --vh:1vh; /* 动态视口高度变量，JS 会更新此值修复 iOS Safari 黑屏 */
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bottom:env(safe-area-inset-bottom,0px);
 }
-*{margin:0;padding:0;box-sizing:border-box}
-html,body{height:100%}
-body{background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;font-size:13.5px;line-height:1.5;background-image:radial-gradient(1000px 500px at 90% -10%,rgba(34,197,94,0.05),transparent 60%),radial-gradient(800px 400px at -10% 30%,rgba(59,130,246,0.04),transparent 60%);background-attachment:fixed}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{height:100%;-webkit-text-size-adjust:100%}
+body{height:100%;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei','Segoe UI',sans-serif;font-size:13.5px;line-height:1.5;background-image:radial-gradient(1000px 500px at 90% -10%,rgba(34,197,94,0.05),transparent 60%),radial-gradient(800px 400px at -10% 30%,rgba(59,130,246,0.04),transparent 60%);background-attachment:fixed;overflow-x:hidden}
 a{color:var(--accent2);text-decoration:none;cursor:pointer}
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
 input,select,textarea{font-family:inherit;font-size:inherit;color:inherit;background:transparent;border:none;outline:none}
 
-/* Layout */
-.app{display:grid;grid-template-columns:240px 1fr;height:100vh;height:100dvh}
-.sidebar{background:linear-gradient(180deg,#08080a,#0c0c0f);border-right:1px solid var(--bd);display:flex;flex-direction:column;overflow:hidden;position:fixed;width:240px;height:100vh;height:100dvh;left:0;top:0;z-index:20}
+/* Layout — 使用 --vh 变量修复 iOS Safari 黑屏 */
+.app{display:grid;grid-template-columns:240px 1fr;height:100vh;height:calc(var(--vh,1vh) * 100);height:100dvh;min-height:100vh;min-height:calc(var(--vh,1vh) * 100)}
+.sidebar{background:linear-gradient(180deg,#08080a,#0c0c0f);border-right:1px solid var(--bd);display:flex;flex-direction:column;overflow:hidden;position:fixed;width:240px;height:100vh;height:calc(var(--vh,1vh) * 100);height:100dvh;left:0;top:0;z-index:20;padding-top:var(--safe-top);padding-bottom:var(--safe-bottom)}
 .sidebar-brand{padding:22px 22px 18px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--bd)}
 .brand-logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(145deg,#a855f7,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 4px 14px rgba(168,85,247,0.35)}
 .brand-name{font-weight:800;font-size:15px;letter-spacing:-0.2px}
@@ -821,8 +997,8 @@ input,select,textarea{font-family:inherit;font-size:inherit;color:inherit;backgr
 .sidebar-footer{padding:12px 18px;border-top:1px solid var(--bd);font-size:10.5px;color:var(--tx4);line-height:1.6}
 .sidebar-footer b{color:var(--tx2)}
 
-.main{margin-left:240px;display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
-.topbar{height:60px;padding:0 28px;display:flex;align-items:center;gap:14px;border-bottom:1px solid var(--bd);background:rgba(8,8,10,0.85);backdrop-filter:blur(14px);position:sticky;top:0;z-index:10;flex-shrink:0}
+.main{margin-left:240px;display:flex;flex-direction:column;height:100vh;height:calc(var(--vh,1vh) * 100);height:100dvh;min-height:100vh;min-height:calc(var(--vh,1vh) * 100);overflow:hidden}
+.topbar{height:60px;padding:0 28px;display:flex;align-items:center;gap:14px;border-bottom:1px solid var(--bd);background:rgba(8,8,10,0.85);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);position:sticky;top:0;z-index:10;flex-shrink:0}
 .topbar h1{font-size:17px;font-weight:800;display:flex;align-items:center;gap:9px}
 .topbar .sub{color:var(--tx4);font-size:11.5px;font-weight:600;margin-left:4px}
 .topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
@@ -935,24 +1111,102 @@ tr:hover{background:var(--bg3)}
 .toast.error{border-color:rgba(239,68,68,0.4)}
 
 /* Responsive */
+/* 平板设备适配 */
 @media(max-width:1024px){
   .app{grid-template-columns:1fr}
-  .sidebar{transform:translateX(-100%);transition:transform .25s}
+  .sidebar{transform:translateX(-100%);transition:transform .25s ease;-webkit-transition:transform .25s ease}
   .sidebar.open{transform:translateX(0)}
   .main{margin-left:0}
   .menu-toggle{display:flex !important}
+  .content{padding:16px 20px}
 }
-.menu-toggle{display:none;width:34px;height:34px;border-radius:8px;align-items:center;justify-content:center;font-size:18px;background:var(--bg3);border:1px solid var(--bd)}
+.menu-toggle{display:none;width:34px;height:34px;border-radius:8px;align-items:center;justify-content:center;font-size:18px;background:var(--bg3);border:1px solid var(--bd);flex-shrink:0}
+/* 手机设备适配 */
 @media(max-width:768px){
-  .content{padding:16px}
-  .topbar{padding:0 16px}
+  .content{padding:12px 14px 20px}
+  .topbar{padding:0 12px 0 14px;gap:8px;height:54px}
+  .topbar h1{font-size:15px}
+  .topbar .sub{display:none}
+  .topbar-right{gap:6px}
   .stats-grid{grid-template-columns:repeat(2,1fr)}
-  .search-bar{padding:10px 14px}
-  td,th{padding:8px 10px;font-size:11.5px}
+  .search-bar{padding:10px 12px}
+  td,th{padding:7px 9px;font-size:11px}
+  .btn.sm{padding:5px 10px;font-size:11px}
+}
+/* 超小屏幕适配 */
+@media(max-width:480px){
+  .stats-grid{grid-template-columns:1fr}
+  .topbar-right .db-status{display:none}
+  .content{padding:10px 10px 16px}
+  td,th{padding:6px 7px;font-size:10.5px}
+  .modal{width:100% !important;max-width:100% !important;border-radius:0;border:none}
+  .modal-body{padding:14px !important}
+}
+/* 横屏模式适配 */
+@media(max-width:900px) and (orientation:landscape) and (max-height:500px){
+  .sidebar-brand{padding:12px 18px}
+  .brand-logo{width:30px;height:30px;font-size:14px}
+  .nav-item{padding:7px 11px;font-size:12px}
+  .topbar{height:48px}
+}
+/* 触摸设备优化 */
+@media(hover:none) and (pointer:coarse){
+  .nav-item:hover{background:transparent;color:var(--tx3)}
+  .nav-item:active{background:var(--bg3)}
+  .btn:active{transform:scale(0.96)}
+  button:active{opacity:0.7}
+}
+/* Safari 特定修复 */
+@media not all and (min-resolution:.001dpcm){
+  @supports(-webkit-touch-callout:none){
+    .sidebar{padding-top:max(var(--safe-top),env(safe-area-inset-top,0px))}
+    .topbar{padding-top:var(--safe-top)}
+    body{height:-webkit-fill-available}
+    .app{height:-webkit-fill-available}
+  }
 }
 </style>
 </head>
 <body>
+<script>
+// ============ 设备检测 & Safari 兼容性修复 ============
+(function(){
+  var ua=navigator.userAgent;
+  var isMobile=/Android|webOS|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)||(navigator.maxTouchPoints>1&&window.innerWidth<768);
+  var isTablet=/iPad|Tablet|PlayBook|Silk/i.test(ua)||(navigator.maxTouchPoints>1&&window.innerWidth>=768&&window.innerWidth<=1024);
+  var isDesktop=!isMobile&&!isTablet;
+  var isIOS=/iPad|iPhone|iPod/.test(ua);
+  var isSafari=/^((?!chrome|android|crios|fxios).)*safari/i.test(ua);
+  var dpr=window.devicePixelRatio||1;
+  var orient=window.innerWidth>window.innerHeight?'landscape':'portrait';
+  var cls=[
+    isMobile?'is-mobile':'',
+    isTablet?'is-tablet':'',
+    isDesktop?'is-desktop':'',
+    isIOS?'is-ios':'',
+    isSafari?'is-safari':'',
+    'dpr-'+(dpr>=3?'3x':dpr>=2?'2x':'1x'),
+    'orient-'+orient
+  ].filter(Boolean).join(' ');
+  document.documentElement.className=cls;
+  // 修复 iOS Safari 100vh 黑屏问题：动态设置 --vh CSS 变量
+  function setVH(){
+    var h=window.innerHeight;
+    document.documentElement.style.setProperty('--vh',(h*0.01)+'px');
+    // Safari 兼容：同时设置 -webkit-fill-available 回退
+    if(isIOS){document.body.style.height=h+'px';}
+  }
+  setVH();
+  // 防抖：避免频繁触发
+  var rt;
+  window.addEventListener('resize',function(){clearTimeout(rt);rt=setTimeout(setVH,100);});
+  window.addEventListener('orientationchange',function(){setTimeout(setVH,200);});
+  // iOS Safari 可视性修复：从后台切回时重新计算
+  document.addEventListener('visibilitychange',function(){
+    if(!document.hidden){setTimeout(setVH,300);}
+  });
+})();
+</script>
 <div class="app">
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
@@ -968,6 +1222,8 @@ tr:hover{background:var(--bg3)}
       <div class="nav-item" data-view="messages" onclick="switchView('messages')"><span class="ico">✉️</span> 私信监控 <span class="count" id="cntMsgs">0</span></div>
       <div class="nav-item" data-view="logs" onclick="switchView('logs')"><span class="ico">📜</span> 系统日志 <span class="count" id="cntLogs">0</span></div>
       <div class="nav-item" data-view="loginLogs" onclick="switchView('loginLogs')"><span class="ico">🔐</span> 登录日志 <span class="count" id="cntLogin">0</span></div>
+      <div class="nav-item" data-view="feedback" onclick="switchView('feedback')"><span class="ico">📮</span> 反馈管理 <span class="count" id="cntFeedback">0</span></div>
+      <div class="nav-item" data-view="community" onclick="switchView('community')"><span class="ico">🌐</span> 社区管理 <span class="count" id="cntCommunity">0</span></div>
       <div class="nav-item" data-view="activity" onclick="switchView('activity')"><span class="ico">⚡</span> 实时活动</div>
     </nav>
     <div class="sidebar-footer">
@@ -1389,6 +1645,74 @@ async function loadActivity(){
   }).join('');
 }
 
+// ============ FEEDBACK (反馈管理) ============
+async function loadFeedback(){
+  $('viewTitle').textContent='📮 反馈管理';
+  $('viewSub').textContent='用户反馈 · 查看并回复';
+  render('<div class="section"><div class="section-head"><h2>📋 所有用户反馈</h2><div class="h-actions"><button class="btn sm" onclick="loadFeedback()">🔄 刷新</button></div></div><div class="search-bar"><input id="searchInput" placeholder="搜索用户名、内容..." oninput="filterTable()"></div><div class="table-wrap" id="tableWrap"><div class="empty">加载中...</div></div></div>');
+  const rows=await fetchJSON('/admin/api/feedback');
+  if(rows.error){$('tableWrap').innerHTML='<div class="empty">'+rows.error+'</div>';return}
+  if(rows.length===0){$('tableWrap').innerHTML='<div class="empty">暂无反馈</div>';return}
+  let html='<div style="display:flex;flex-direction:column;gap:12px">';
+  rows.forEach(r=>{
+    const hasAtt=r.attachment_data?'📎 <a href="'+esc(r.attachment_data)+'" download="'+esc(r.attachment_name||'file')+'" style="color:#c084fc">'+esc(r.attachment_name||'附件')+'</a>':'';
+    const replyHtml=r.admin_reply?
+      '<div style="margin-top:8px;padding:8px 12px;background:rgba(34,197,94,0.08);border-radius:8px;border-left:3px solid #4ade80"><b style="color:#4ade80">管理员回复：</b>'+esc(r.admin_reply)+'<br><span style="font-size:10px;color:var(--tx4)">'+esc(r.replied_at||'')+'</span></div>':
+      '<div style="margin-top:8px"><input id="replyInput_'+r.id+'" placeholder="输入回复..." style="width:70%;padding:6px 10px;border-radius:6px;border:1px solid var(--bd);background:var(--bg3);color:var(--tx);font-size:12px"><button class="btn sm primary" onclick="replyFeedback('+r.id+')">📤 回复</button> <button class="btn sm danger" onclick="deleteFeedback('+r.id+')">🗑 删除</button></div>';
+    html+='<div style="background:var(--bg3);padding:14px;border-radius:10px;border:1px solid var(--bd)">'+
+      '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><b style="color:#c084fc">'+esc(r.username)+'</b><span style="font-size:10px;color:var(--tx4)">'+esc(r.created_at)+' · IP: '+esc(r.ip||'-')+'</span></div>'+
+      '<div style="font-size:13px;color:var(--tx);line-height:1.6">'+esc(r.message)+'</div>'+
+      (hasAtt?'<div style="margin-top:6px;font-size:12px">'+hasAtt+'</div>':'')+
+      replyHtml+
+    '</div>';
+  });
+  html+='</div>';
+  $('tableWrap').innerHTML=html;
+}
+async function replyFeedback(id){
+  const inp=$('replyInput_'+id);if(!inp)return;
+  const reply=inp.value.trim();if(!reply){toast('请输入回复内容','error');return}
+  const r=await postJSON('/admin/api/feedback/reply',{id,reply});
+  if(r.error){toast(r.error,'error');return}
+  toast('✅ 回复成功','success');loadFeedback();
+}
+async function deleteFeedback(id){
+  if(!confirm('确认删除此反馈？'))return;
+  const r=await postJSON('/admin/api/feedback/delete',{id});
+  if(r.error){toast(r.error,'error');return}
+  toast('🗑 已删除','success');loadFeedback();
+}
+
+// ============ COMMUNITY (社区管理) ============
+async function loadCommunity(){
+  $('viewTitle').textContent='🌐 社区管理';
+  $('viewSub').textContent='社区帖子 · 查看与删除';
+  render('<div class="section"><div class="section-head"><h2>📋 所有社区帖子</h2><div class="h-actions"><button class="btn sm" onclick="loadCommunity()">🔄 刷新</button></div></div><div class="search-bar"><input id="searchInput" placeholder="搜索用户名、内容..." oninput="filterTable()"></div><div class="table-wrap" id="tableWrap"><div class="empty">加载中...</div></div></div>');
+  const rows=await fetchJSON('/admin/api/community');
+  if(rows.error){$('tableWrap').innerHTML='<div class="empty">'+rows.error+'</div>';return}
+  if(rows.length===0){$('tableWrap').innerHTML='<div class="empty">暂无帖子</div>';return}
+  let html='<div style="display:flex;flex-direction:column;gap:12px">';
+  rows.forEach(r=>{
+    const hasAtt=r.attachment_data?
+      (r.attachment_type&&r.attachment_type.startsWith('image')?
+        '<img src="'+esc(r.attachment_data)+'" style="max-width:300px;max-height:200px;border-radius:8px;margin-top:6px;cursor:pointer" onclick="window.open(this.src)" />':
+        '📎 <a href="'+esc(r.attachment_data)+'" download="'+esc(r.attachment_name||'file')+'" style="color:#c084fc">'+esc(r.attachment_name||'附件')+'</a>'):'';
+    html+='<div style="background:var(--bg3);padding:14px;border-radius:10px;border:1px solid var(--bd)" id="post_'+r.id+'">'+
+      '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><b style="color:#c084fc">'+esc(r.username)+'</b><div><span style="font-size:10px;color:var(--tx4)">'+esc(r.created_at)+'</span> <button class="btn sm danger" onclick="deleteCommunityPost('+r.id+')">🗑 删除</button></div></div>'+
+      '<div style="font-size:13px;color:var(--tx);line-height:1.6">'+esc(r.content)+'</div>'+
+      (hasAtt?'<div style="margin-top:6px">'+hasAtt+'</div>':'')+
+    '</div>';
+  });
+  html+='</div>';
+  $('tableWrap').innerHTML=html;
+}
+async function deleteCommunityPost(id){
+  if(!confirm('确认删除此帖子？'))return;
+  const r=await postJSON('/admin/api/community/delete',{id});
+  if(r.error){toast(r.error,'error');return}
+  toast('🗑 已删除','success');loadCommunity();
+}
+
 // ============ COMMON ============
 function filterTable(){
   const q=($('searchInput')||{}).value;
@@ -1402,7 +1726,7 @@ function switchView(view){
   currentView=view;
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===view));
   document.getElementById('sidebar').classList.remove('open');
-  const map={dashboard:loadDashboard,users:loadUsers,ratings:loadRatings,comments:loadComments,plays:loadPlays,messages:loadMessages,logs:loadLogs,loginLogs:loadLoginLogs,activity:loadActivity};
+  const map={dashboard:loadDashboard,users:loadUsers,ratings:loadRatings,comments:loadComments,plays:loadPlays,messages:loadMessages,logs:loadLogs,loginLogs:loadLoginLogs,feedback:loadFeedback,community:loadCommunity,activity:loadActivity};
   if(map[view])map[view]();
 }
 function openModal(){$('modalOverlay').classList.add('open')}
@@ -1430,6 +1754,7 @@ async function loadAll(){
   await switchView(currentView);
   loadOverviewCounts();
 }
+
 // Close modal on overlay click
 $('modalOverlay').addEventListener('click',e=>{if(e.target===$('modalOverlay'))closeModal()});
 // ESC to close modal
@@ -1471,8 +1796,75 @@ function serveStatic(req, res, filePath, ext) {
   });
 }
 
-// ============ HTTP SERVER ============
-const server = http.createServer(async function (req, res) {
+// ============ HTTP SERVER (for local dev) ============
+const server = http.createServer(function (req, res) {
+  // 本地开发：静态文件由 serverListener 之前的拦截处理
+  const parsedUrl = url.parse(req.url, true);
+  const p = parsedUrl.pathname;
+  const m = req.method;
+
+  if (m === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    });
+    res.end();
+    return;
+  }
+
+  // 静态文件（仅本地开发需要，Vercel 由 CDN 直接服务静态文件）
+  if (p === '/' || p === '/index.html') {
+    return serveStatic(req, res, path.join(__dirname, 'index.html'), '.html');
+  }
+  if (p === '/catalog.json') {
+    return serveStatic(req, res, path.join(__dirname, 'catalog.json'), '.json');
+  }
+  const ext = path.extname(p);
+  if (ext && MIME[ext] && p !== '/admin') {
+    const safePath = path.join(__dirname, p.split('/').filter(Boolean).join(path.sep));
+    if (safePath.startsWith(__dirname) && fs.existsSync(safePath)) {
+      return serveStatic(req, res, safePath, ext);
+    }
+  }
+
+  // 其他所有请求交给 serverListener（API + Admin）
+  ensureDB().then(() => serverListener(req, res)).catch(err => {
+    try { sendJSON(res, { error: 'DB init failed: ' + (err && err.message || err) }, 500); }
+    catch (e) {}
+  });
+});
+
+// ============ EXPORT HANDLER (for Vercel serverless) ============
+// 确保 DB 初始化只执行一次（Vercel 冷启动时复用全局缓存）
+let _dbReady = null;
+function ensureDB() {
+  if (!_dbReady) {
+    _dbReady = initDB().catch(function (err) {
+      _dbReady = null;
+      throw err;
+    });
+  }
+  return _dbReady;
+}
+
+// 导出 Vercel 兼容的请求处理函数
+async function handler(req, res) {
+  try {
+    await ensureDB();
+    await serverListener(req, res);
+  } catch (err) {
+    try {
+      sendJSON(res, { error: '服务器内部错误: ' + (err && err.message || err) }, 500);
+    } catch (e) { /* response already sent */ }
+  }
+}
+module.exports = handler;
+module.exports.handler = handler;
+module.exports.ensureDB = ensureDB;
+
+// 把原来的 server 回调提取出来，供 Vercel handler 复用
+const serverListener = async function (req, res) {
   try {
     const parsedUrl = url.parse(req.url, true);
     const p = parsedUrl.pathname;
@@ -1492,6 +1884,7 @@ const server = http.createServer(async function (req, res) {
     // --- Public API Routes ---
     if (p === '/api/health') return await apiHealth(req, res);
     if (p === '/api/daily-info' && m === 'GET') return await apiDailyInfo(req, res);
+    if (p === '/api/captcha' && m === 'GET') return await apiCaptcha(req, res);
     if (p === '/api/register' && m === 'POST') return await apiRegister(req, res);
     if (p === '/api/login' && m === 'POST') return await apiLogin(req, res);
     if (p === '/api/rate' && m === 'POST') return await apiRate(req, res);
@@ -1503,6 +1896,14 @@ const server = http.createServer(async function (req, res) {
     if (p === '/api/song' && m === 'GET') return await apiGetSong(req, res);
     if (p === '/api/stats' && m === 'GET') return await apiStats(req, res);
     if (p === '/api/sync' && m === 'POST') return await apiSync(req, res);
+
+    // --- 用户端：反馈 API ---
+    if (p === '/api/feedback' && m === 'POST') return await apiSubmitFeedback(req, res);
+    if (p === '/api/feedback' && m === 'GET') return await apiGetFeedback(req, res);
+
+    // --- 用户端：社区 API ---
+    if (p === '/api/community/post' && m === 'POST') return await apiCommunityPost(req, res);
+    if (p === '/api/community/posts' && m === 'GET') return await apiCommunityList(req, res);
 
     // --- Admin: Dashboard Page ---
     if (p === '/admin' || p === '/admin/') {
@@ -1523,7 +1924,7 @@ const server = http.createServer(async function (req, res) {
     if (p === '/admin/api/login-logs' && m === 'GET') return await adminLoginLogs(req, res);
     if (p === '/admin/api/export' && m === 'GET') return await adminExport(req, res);
 
-    // --- Admin: API Routes (POST - 管理 操作) ---
+    // --- Admin: API Routes (POST) ---
     if (p === '/admin/api/user/delete' && m === 'POST') return await adminDeleteUser(req, res);
     if (p === '/admin/api/user/password' && m === 'POST') return await adminChangePassword(req, res);
     if (p === '/admin/api/user/ban' && m === 'POST') return await adminToggleBan(req, res);
@@ -1537,46 +1938,42 @@ const server = http.createServer(async function (req, res) {
     if (p === '/admin/api/logs/clear' && m === 'POST') return await adminClearLogs(req, res);
     if (p === '/admin/api/login-logs/clear' && m === 'POST') return await adminClearLoginLogs(req, res);
 
-    // --- Static: User Frontend ---
-    if (p === '/' || p === '/index.html') {
-      return serveStatic(req, res, path.join(__dirname, 'index.html'), '.html');
-    }
-    if (p === '/catalog.json') {
-      return serveStatic(req, res, path.join(__dirname, 'catalog.json'), '.json');
-    }
-    // Catch-all for any other static requests
-    const ext = path.extname(p);
-    if (ext && MIME[ext]) {
-      const safePath = path.join(__dirname, p.split('/').filter(Boolean).join(path.sep));
-      if (safePath.startsWith(__dirname) && fs.existsSync(safePath)) {
-        return serveStatic(req, res, safePath, ext);
-      }
-    }
-    // Fallback to index.html for SPA
-    return serveStatic(req, res, path.join(__dirname, 'index.html'), '.html');
+    // --- 管理员：反馈管理 API ---
+    if (p === '/admin/api/feedback' && m === 'GET') return await adminGetFeedback(req, res);
+    if (p === '/admin/api/feedback/reply' && m === 'POST') return await adminReplyFeedback(req, res);
+    if (p === '/admin/api/feedback/delete' && m === 'POST') return await adminDeleteFeedback(req, res);
+
+    // --- 管理员：社区管理 API ---
+    if (p === '/admin/api/community' && m === 'GET') return await adminGetCommunity(req, res);
+    if (p === '/admin/api/community/delete' && m === 'POST') return await adminDeleteCommunity(req, res);
+
+    // 404
+    sendJSON(res, { error: 'Not found', path: p }, 404);
   } catch (err) {
     try { sendJSON(res, { error: '服务器内部错误: ' + (err && err.message || err) }, 500); }
     catch (e) { /* response already sent */ }
   }
-});
+};
 
 // ============ STARTUP (await DB init before listening) ============
-initDB().then(function () {
-  server.listen(PORT, '0.0.0.0', function () {
-    console.log('');
-    console.log('  =================================================');
-    console.log('   NCS Ratings · Cloud Server (Turso/libSQL · God Mode Admin)');
-    console.log('  =================================================');
-    console.log('   用户网站 (User Site):   http://localhost:' + PORT + '/');
-    console.log('   超级后台 (Admin Site):  http://localhost:' + PORT + '/admin');
-    console.log('   API 健康检查:           http://localhost:' + PORT + '/api/health');
-    console.log('   数据库 (Turso):         ' + TURSO_URL);
-    console.log('  =================================================');
-    console.log('');
-    // 启动时记录系统日志
-    logSystem('INFO', 'SERVER_START', '-', '服务器启动，端口 ' + PORT, '127.0.0.1');
+// 仅在直接运行时启动 HTTP 服务器（Vercel 环境不执行此分支）
+if (require.main === module) {
+  initDB().then(function () {
+    server.listen(PORT, '0.0.0.0', function () {
+      console.log('');
+      console.log('  =================================================');
+      console.log('   NCS Ratings · Cloud Server (Turso/libSQL · God Mode Admin)');
+      console.log('  =================================================');
+      console.log('   用户网站 (User Site):   http://localhost:' + PORT + '/');
+      console.log('   超级后台 (Admin Site):  http://localhost:' + PORT + '/admin');
+      console.log('   API 健康检查:           http://localhost:' + PORT + '/api/health');
+      console.log('   数据库 (Turso):         ' + TURSO_URL);
+      console.log('  =================================================');
+      console.log('');
+      logSystem('INFO', 'SERVER_START', '-', '服务器启动，端口 ' + PORT, '127.0.0.1');
+    });
+  }).catch(function (err) {
+    console.error('数据库初始化失败:', err && err.message || err);
+    process.exit(1);
   });
-}).catch(function (err) {
-  console.error('数据库初始化失败:', err && err.message || err);
-  process.exit(1);
-});
+}
