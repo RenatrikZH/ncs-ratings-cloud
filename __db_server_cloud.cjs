@@ -118,6 +118,22 @@ const SCHEMA_SQL = `
     ip TEXT,
     created_at TEXT DEFAULT (datetime('now'))
   );
+  CREATE TABLE IF NOT EXISTS songs (
+    audio_url TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    artists TEXT,
+    cover_url TEXT,
+    genres TEXT,
+    moods TEXT,
+    release_date TEXT,
+    bpm INTEGER DEFAULT 0,
+    duration TEXT,
+    album TEXT,
+    tid TEXT,
+    versions TEXT,
+    first_seen TEXT,
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
   CREATE INDEX IF NOT EXISTS idx_ratings_audio ON ratings(audio_url);
   CREATE INDEX IF NOT EXISTS idx_comments_audio ON comments(audio_url);
   CREATE INDEX IF NOT EXISTS idx_playlogs_audio ON play_logs(audio_url);
@@ -361,40 +377,58 @@ async function sendEmail(to, subject, htmlContent) {
     }
   }
 
-  // 方案 B：SMTP 真实发送（QQ邮箱/163/126等，nodemailer）
+  // 方案 B：SMTP 真实发送（QQ邮箱/163/126等，nodemailer）— 多策略降级
   if (cfg && cfg.host) {
-    try {
-      const nodemailer = require('nodemailer');
-      // 不同服务复用 transporter
-      const cacheKey = cfg.auth.user + '|' + cfg.host + ':' + cfg.port;
-      if (!_mailerCache || _mailerCache.key !== cacheKey) {
-        const opts = {
-          host: cfg.host,
-          port: cfg.port,
-          secure: !!cfg.secure,
-          auth: { user: cfg.auth.user, pass: cfg.auth.pass },
-          connectionTimeout: 15000,
-          greetingTimeout: 15000,
-          socketTimeout: 15000
-        };
-        if (cfg.starttls) {
-          opts.secure = false;
-          opts.requireTLS = true;
-          opts.tls = { ciphers: 'SSLv3' };
-        }
-        _mailerCache = { key: cacheKey, transporter: nodemailer.createTransport(opts) };
+    const nodemailer = require('nodemailer');
+    // 针对 QQ邮箱等国内服务商：提供多套连接策略依次尝试
+    // （云端环境 IP 可能被风控、TLS 协商差异等）
+    const strategyList = [];
+    strategyList.push({
+      label: cfg.name + '/SSL',
+      opts: {
+        host: cfg.host, port: cfg.secure ? cfg.port : 465, secure: true,
+        auth: { user: cfg.auth.user, pass: cfg.auth.pass, method: 'PLAIN' },
+        connectionTimeout: 20000, greetingTimeout: 20000, socketTimeout: 20000,
+        name: 'smtp.localhost', pool: false, family: 4,
+        tls: { rejectUnauthorized: false, minVersion: 'TLSv1.2', ciphers: 'HIGH:!aNULL:!MD5' }
       }
-      const info = await _mailerCache.transporter.sendMail({
-        from: cfg.from || cfg.auth.user,
-        to,
-        subject,
-        html: htmlContent
-      });
-      return { ok: !!info.messageId, provider: cfg.name, messageId: info.messageId, response: String(info.response || '').substring(0,200) };
-    } catch (e) {
-      // SMTP 发送失败时，不降级到开发模式，让用户知道原因
-      return { ok: false, provider: cfg.name, error: String(e).substring(0, 300), dev_mode: true, dev_reason: 'SMTP失败: ' + String(e).substring(0,80) };
+    });
+    strategyList.push({
+      label: cfg.name + '/SSL-LOGIN',
+      opts: {
+        host: cfg.host, port: cfg.secure ? cfg.port : 465, secure: true,
+        auth: { user: cfg.auth.user, pass: cfg.auth.pass, method: 'LOGIN' },
+        connectionTimeout: 20000, greetingTimeout: 20000, socketTimeout: 20000,
+        name: 'mail.localhost', pool: false, family: 4,
+        tls: { rejectUnauthorized: false, minVersion: 'TLSv1', secureProtocol: 'TLSv1_2_method' }
+      }
+    });
+    strategyList.push({
+      label: cfg.name + '/STARTTLS',
+      opts: {
+        host: cfg.host, port: 587, secure: false, requireTLS: true,
+        auth: { user: cfg.auth.user, pass: cfg.auth.pass, method: 'PLAIN' },
+        connectionTimeout: 20000, greetingTimeout: 20000, socketTimeout: 20000,
+        name: 'mail.localhost', pool: false, family: 4,
+        tls: { rejectUnauthorized: false, minVersion: 'TLSv1.2' }
+      }
+    });
+    let lastError = '';
+    for (const s of strategyList) {
+      try {
+        const transporter = nodemailer.createTransport(s.opts);
+        const info = await transporter.sendMail({
+          from: cfg.from || cfg.auth.user, to, subject, html: htmlContent
+        });
+        transporter.close();
+        return { ok: !!info.messageId, provider: s.label, messageId: info.messageId, response: String(info.response || '').substring(0,200) };
+      } catch (e) {
+        lastError = String(e).substring(0, 300);
+        console.warn('[sendEmail] ' + s.label + ' failed:', e.message.substring(0, 120));
+      }
     }
+    // 全部策略失败 → 降级到开发模式
+    return { ok: false, provider: cfg.name, error: lastError, dev_mode: true, dev_reason: 'SMTP失败: ' + lastError.substring(0,80) };
   }
 
   // 方案 C：未配置任何邮件服务 → 开发模式（验证码通过接口返回给前端toast显示）

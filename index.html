@@ -733,6 +733,15 @@ img{display:block;max-width:100%;-webkit-user-drag:none}
 .overlay.open{display:flex}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 
+/* ===== Skeleton / Loading Shimmer ===== */
+@keyframes skelShimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
+.sk-line{display:block;width:100%;height:12px;background:linear-gradient(90deg,rgba(255,255,255,.04) 0%,rgba(255,255,255,.09) 50%,rgba(255,255,255,.04) 100%);background-size:800px 100%;animation:skelShimmer 1.6s infinite linear;border-radius:8px;margin:4px 0}
+.sk-line.w30{width:30%}.sk-line.w50{width:50%}.sk-line.w60{width:60%}.sk-line.w70{width:70%}
+.sk-line.inline-block{display:inline-block;height:1.2em;vertical-align:middle}
+.card.skel{pointer-events:none}.card.skel .cover{background:linear-gradient(90deg,rgba(255,255,255,.04) 0%,rgba(255,255,255,.09) 50%,rgba(255,255,255,.04) 100%);background-size:800px 100%;animation:skelShimmer 1.6s infinite linear}.card.skel .t,.card.skel .a{border-radius:6px}
+.chip.skel{width:90px;height:32px;border:none;background:linear-gradient(90deg,rgba(255,255,255,.04) 0%,rgba(255,255,255,.09) 50%,rgba(255,255,255,.04) 100%);background-size:800px 100%;animation:skelShimmer 1.6s infinite linear}
+.select-wrap .sk-line{display:inline-block;vertical-align:middle;margin-right:8px}
+
 .modal{
   background:linear-gradient(180deg,#151519 0%,#101013 100%);
   border-radius:var(--r-xl);
@@ -2342,11 +2351,53 @@ const Player = {
 // ========== APP ==========
 const app = {
   catalog: new Catalog(), view:"home", genre: "all", sort: "wilson", userOpen: false,
+  _firstPaintDone: false,
+
+  // 骨架屏：优先显示 UI 结构，不等 catalog.json 下载完成
+  renderSkeleton(){
+    const area = $("#contentArea");
+    if(!area) return;
+    const sk = (n) => Array.from({length:n}).map(()=>`
+      <div class="card skel">
+        <div class="cover"></div>
+        <div class="t sk-line"></div>
+        <div class="a sk-line w70"></div>
+      </div>`).join("");
+    area.innerHTML = `
+      <div class="hero">
+        <div class="hero-row">
+          <div>
+            <h1 class="sk-line w50 inline-block"></h1>
+            <p class="sk-line w70"></p>
+          </div>
+          <div class="hero-stats">
+            ${[1,2,3,4,5,6].map(()=>`<div class="stat"><b class="sk-line inline-block w30"></b><span class="sk-line w50"></span></div>`).join("")}
+          </div>
+        </div>
+      </div>
+      <div class="toolbar">
+        ${Array.from({length:6}).map(()=>`<button class="chip skel"></button>`).join("")}
+        <div class="select-wrap"><span class="sk-line w30"></span><div class="sk-line w60"></div></div>
+      </div>
+      <div class="grid">${sk(40)}</div>
+    `;
+  },
+
   async init(){
     showToast('<span class="spin"></span> <b>正在加载 NCS 歌曲库...</b>');
-    await this.catalog.init((done,total,newOnes,totalTracks)=>{
-      $("#syncText").textContent = `发现新歌：${newOnes} 首，共 ${totalTracks} 首 (${done}/${total})`;
+    // ─── 优先级 1：立即渲染骨架屏（用户感知"秒开"） ───
+    this.renderSkeleton();
+
+    // ─── 优先级 2：并行加载 catalog + 启动 Player 绑定 ───
+    const catPromise = this.catalog.init((done,total,newOnes,totalTracks)=>{
+      const st = $("#syncText");
+      if(st) st.textContent = `发现新歌：${newOnes} 首，共 ${totalTracks} 首 (${done}/${total})`;
     });
+    this.bindGlobal();      // 绑定导航/按钮交互（无需数据）
+    try { Player.init && Player.init(); } catch(_) {} // 音频元件初始化
+
+    // ─── 优先级 3：catalog 第一阶段就绪 → 立即渲染首页高频内容（不等 DB 同步） ───
+    await catPromise;
     hideToast();
     this.updateSyncUI();
     // Compute quick meta fallback
@@ -2369,48 +2420,52 @@ const app = {
     }, {passive:true});
 
     this.refreshUser();
-    this.renderHome();
-    this.bindGlobal();
-    Player.init();
-    Player.setQueue(this.catalog.all().slice(), 0);
+    // 首页：按好评率优先渲染 → 用户最常看的页面
+    this.renderHome(undefined, {fastFirstPaint: true});
+    this._firstPaintDone = true;
+    // Queue 初始化（后台，不阻塞首屏）
+    setTimeout(() => { try { Player.setQueue(this.catalog.all().slice(), 0); } catch(_) {} }, 50);
 
-    // ===== Database sync: push local data → fetch server data → merge =====
-    (async ()=>{
-      const online = await API.health();
-      if(!online) return;
-      // 1. Push existing local data to database
-      API.sync(Ratings.get(), Comments.get(), Users.get());
-      // 2. Fetch all global data from database
-      const data = await API.fetchAll();
-      if(!data) return;
-      // 3. Merge ratings (server = source of truth, but keep local if server has less)
-      const localR = Ratings.get();
-      let mergedR = false;
-      for(const [url, r] of Object.entries(data.ratings||{})){
-        const lr = localR[url];
-        if(!lr || Object.keys(lr.users||{}).length < Object.keys(r.users||{}).length){
-          localR[url] = {likes:r.likes, dislikes:r.dislikes, total:(r.likes||0)+(r.dislikes||0), users:r.users||{}};
-          mergedR = true;
-        }
-      }
-      if(mergedR) Ratings.set(localR);
-      // 4. Merge comments (add server comments not in local)
-      const localC = Comments.get();
-      let mergedC = false;
-      for(const [url, arr] of Object.entries(data.comments||{})){
-        for(const c of (arr||[])){
-          const exists = localC.find(lc => lc.audio===url && lc.user===c.user && lc.text===c.text);
-          if(!exists){
-            localC.unshift({id:uid(), audio:url, user:c.user, choice:c.vote||0, text:c.text, at:new Date(c.time).getTime()||Date.now()});
-            mergedC = true;
+    // ─── 优先级 4：数据库同步（空闲时执行，首屏已完成再合并） ───
+    const scheduleIdle = window.requestIdleCallback || ((cb)=>setTimeout(cb, 400));
+    scheduleIdle(()=>{
+      (async ()=>{
+        const online = await API.health();
+        if(!online) return;
+        // 1. Push existing local data to database
+        API.sync(Ratings.get(), Comments.get(), Users.get());
+        // 2. Fetch all global data from database
+        const data = await API.fetchAll();
+        if(!data) return;
+        // 3. Merge ratings (server = source of truth, but keep local if server has less)
+        const localR = Ratings.get();
+        let mergedR = false;
+        for(const [url, r] of Object.entries(data.ratings||{})){
+          const lr = localR[url];
+          if(!lr || Object.keys(lr.users||{}).length < Object.keys(r.users||{}).length){
+            localR[url] = {likes:r.likes, dislikes:r.dislikes, total:(r.likes||0)+(r.dislikes||0), users:r.users||{}};
+            mergedR = true;
           }
         }
-      }
-      if(mergedC) Comments.set(localC);
-      // 5. Re-render home to show merged data
-      this.renderHome();
-      showToast("✅ 数据库同步完成", 2000);
-    })();
+        if(mergedR) Ratings.set(localR);
+        // 4. Merge comments (add server comments not in local)
+        const localC = Comments.get();
+        let mergedC = false;
+        for(const [url, arr] of Object.entries(data.comments||{})){
+          for(const c of (arr||[])){
+            const exists = localC.find(lc => lc.audio===url && lc.user===c.user && lc.text===c.text);
+            if(!exists){
+              localC.unshift({id:uid(), audio:url, user:c.user, choice:c.vote||0, text:c.text, at:new Date(c.time).getTime()||Date.now()});
+              mergedC = true;
+            }
+          }
+        }
+        if(mergedC) Comments.set(localC);
+        // 5. Re-render home to show merged data (after idle, not during first paint)
+        if(mergedR || mergedC) this.renderHome();
+        showToast("✅ 数据库同步完成", 1800);
+      })();
+    }, {timeout: 3000});
   },
   updateSyncUI(){
     const t = this.catalog.lastUpdate;
@@ -2583,17 +2638,62 @@ const app = {
     }
   },
 
-  renderHome(searchQ){
+  renderHome(searchQ, opts){
+    opts = opts || {};
     let arr = this.catalog.all().slice();
     const rs = Ratings.get();
-    const mapped = arr.map((s,i) => {
+    const wilsonCached = (likes, dislikes) => {
+      // Fast path for tracks without any votes yet — avoid beta/wilson math for ~1000s of tracks
+      if (!likes && !dislikes) return 0.5;
+      return wilsonScore(likes, dislikes);
+    };
+    const mapOne = (s, i) => {
       const r = rs[s.audioUrl] || {likes:0,dislikes:0,total:0};
-      const ws = wilsonScore(r.likes, r.dislikes);
+      const ws = wilsonCached(r.likes, r.dislikes);
       return {...s, i, likes:r.likes, dislikes:r.dislikes, total:r.total, ws, net:r.likes-r.dislikes};
-    });
+    };
+
     let title = "全部歌曲 · 按 Wilson 好评率";
+    let mapped;
+    // ========== 快速首屏模式：只计算和渲染排序前 N 首（用户最常看的区域）==========
+    if (opts.fastFirstPaint && !searchQ && this.view !== "search") {
+      const TOP_N = 200; // 只对最新+评分高的 200 首计算+排序，其余延迟处理
+      // 快速评分：先用首 200 条做排序，渲染首页 top 60。完整映射在空闲时补算。
+      // 先取前 TOP_N（newest first 方向）作为候选，做映射和wilson排序，取前60立即渲染。
+      const candidates = arr.slice(0, TOP_N);
+      const topMapped = candidates.map(mapOne);
+      topMapped.sort((a,b)=> b.ws - a.ws || b.total - a.total);
+      // 选择页面标题和排序方向
+      if(this.view === "trending") title="🔥 好评排行榜 · Wilson Score 置信算法";
+      else if(this.view === "newest") title="🆕 最新入库的歌曲";
+      else if(this.view === "worst") title="⚔️ 争议歌曲榜 · 评分最有争议";
+      // 先渲染用户最常看的部分（首页=好评排序）
+      if(this.view === "newest"){ /* newest 不重排 */ }
+      else if(this.view === "worst"){ topMapped.sort((a,b)=> a.ws - b.ws || b.total - a.total); }
+      this.renderGrid(topMapped, this.view, title);
+
+      // 空闲时补算完整映射并刷新（让滚动无限加载数据完整）
+      const scheduleIdle = window.requestIdleCallback || ((cb)=>setTimeout(cb, 300));
+      scheduleIdle(()=>{
+        const _full = arr.map(mapOne);
+        if(this.view === "trending") _full.sort((a,b)=> b.ws - a.ws || b.total - a.total);
+        else if(this.view === "newest") /* no-op */ ;
+        else if(this.view === "worst") _full.sort((a,b)=> a.ws - b.ws || b.total - a.total);
+        else _full.sort((a,b)=> b.ws - a.ws || b.total - a.total);
+        // 只有仍停留在相同页面才替换，否则让用户主动触发 renderHome
+        if(!searchQ && (this.view === "home" || this.view === "trending" || this.view === "newest" || this.view === "worst")) {
+          // 只刷新网格（保留 hero 与 toolbar 已渲染好的内容）
+          this._currentFullGrid = _full;
+          this.refreshGridData(_full);
+        }
+      }, {timeout: 4000});
+      return;
+    }
+
+    // 常规完整渲染
+    mapped = arr.map(mapOne);
     if(this.view === "trending"){ title="🔥 好评排行榜 · Wilson Score 置信算法"; mapped.sort((a,b)=> b.ws - a.ws || b.total - a.total); }
-    else if(this.view === "newest"){ title="🆕 最新入库的歌曲"; mapped.reverse(); }
+    else if(this.view === "newest"){ title="🆕 最新入库的歌曲"; }
     else if(this.view === "worst"){ title="⚔️ 争议歌曲榜 · 评分最有争议"; mapped.sort((a,b)=> a.ws - b.ws || b.total - a.total); }
     else if(this.view === "search" || searchQ){
       const q = (searchQ || $("#searchInput").value || "").toLowerCase();
@@ -2605,6 +2705,19 @@ const app = {
       mapped.sort((a,b)=> b.ws - a.ws || b.total - a.total);
     }
     this.renderGrid(mapped, this.view, title);
+  },
+
+  // 只替换网格数据（不重建 hero/toolbar，已渲染好保持"秒开"体感）
+  refreshGridData(fullList){
+    if(!fullList || !fullList.length) return;
+    const grid = $("#songGrid");
+    if(!grid) return;
+    const applyGenre = (this.genre !== "all") ? fullList.filter(t => (t.genreNames||[]).includes(this.genre)) : fullList;
+    this.applySort(applyGenre, this.sort);
+    // 保留 skeleton 占位数量，替换前 show.length 条卡片为真实（已在前一次 renderGrid 完成）
+    // 这里直接把完整列表挂到 renderGrid 的无限加载逻辑上
+    // 获取当前 show.length 然后更新 list / show 引用（通过重建 DOM 的前半）
+    grid._listRef = applyGenre;
   },
 
   renderGrid(tracks, viewKey, heading){
@@ -2699,7 +2812,9 @@ const app = {
       const ob = new IntersectionObserver(entries=>{
         entries.forEach(en=>{ if(en.isIntersecting){
           ob.disconnect();
-          const next = list.slice(show.length, show.length + 360);
+          // 支持 refreshGridData 注入的完整数据：优先使用 _listRef
+          const realList = (grid._listRef && grid._listRef.length > list.length) ? grid._listRef : list;
+          const next = realList.slice(show.length, show.length + 360);
           next.forEach((s)=>{
             const el = document.createElement("div"); el.className="card";
             const pct = fmtRate(s.ws); const rateCls = s.ws >= 0.5 ? "positive" : (s.ws<0.5 && s.total>0 ? "negative":"");
@@ -2707,12 +2822,12 @@ const app = {
             const coverStyle = s.coverUrl ? "" : `style="background:${coverGradientFor(s.title)}"`;
             const coverFallback = `this.onerror=null;this.parentNode.style.background='${coverGradientFor(s.title)}';this.removeAttribute('src');this.style.display='none'`;
             el.innerHTML=`<div class="cover" ${coverStyle}>${s.coverUrl?`<img loading="lazy" src="${esc(s.coverUrl)}" onerror="${coverFallback}">`:""}<button class="play-btn">▶</button><div class="rating ${rateCls}">${s.total>0?pct:"NEW"}</div></div><div class="t">${esc(s.title)}</div><div class="a">${esc(s.artists||"")}</div>${genres}`;
-            el.querySelector(".play-btn").onclick = (e)=>{ e.stopPropagation(); Player.play(s, list); };
+            el.querySelector(".play-btn").onclick = (e)=>{ e.stopPropagation(); Player.play(s, realList); };
             el.onclick = ()=> this.openSong(s);
             grid.appendChild(el);
           });
           show.push(...next);
-          if(list.length > show.length && grid.lastElementChild) ob.observe(grid.lastElementChild);
+          if(realList.length > show.length && grid.lastElementChild) ob.observe(grid.lastElementChild);
         }});
       },{rootMargin:"160px"});
       if(grid.lastElementChild) ob.observe(grid.lastElementChild);
