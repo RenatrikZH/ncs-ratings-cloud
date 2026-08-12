@@ -1,5 +1,5 @@
 /**
- * Netlify Function — API Handler Adapter (deploy build: 20260812-v4-forcerebuild)
+ * Netlify Function — API Handler Adapter (deploy build: 20260812-v12-qq-smtp-working)
  * 将 Netlify 的 event/context 格式适配到 Node.js req/res 格式
  * 然后委托给 __db_server_cloud.cjs 的 serverListener 处理
  * 

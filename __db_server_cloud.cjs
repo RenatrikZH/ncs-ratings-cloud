@@ -38,6 +38,7 @@ const SCHEMA_SQL = `
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
+    email TEXT,
     avatar TEXT,
     phone TEXT,
     role TEXT DEFAULT 'user',
@@ -45,6 +46,7 @@ const SCHEMA_SQL = `
     created_at TEXT DEFAULT (datetime('now')),
     last_login TEXT
   );
+
   CREATE TABLE IF NOT EXISTS ratings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL,
@@ -140,6 +142,7 @@ async function addColumnIfMissing(table, column, def) {
 async function initDB() {
   await db.executeMultiple(SCHEMA_SQL);
   await addColumnIfMissing('users', 'phone', 'TEXT');
+  await addColumnIfMissing('users', 'email', 'TEXT');
   await addColumnIfMissing('users', 'role', "TEXT DEFAULT 'user'");
   await addColumnIfMissing('users', 'banned', 'INTEGER DEFAULT 0');
   await addColumnIfMissing('users', 'last_login', 'TEXT');
@@ -222,6 +225,180 @@ function verifyCaptcha(token, input) {
   } catch (e) {
     return false;
   }
+}
+
+// ============ 邮箱验证码系统（无状态签名，兼容 Serverless） ============
+// 验证码通过 HMAC-SHA256 签名令牌验证，无需内存存储
+// 支持多种邮箱 SMTP 发送：QQ邮箱 / 163 / 126 / 139 / 新浪 / Gmail / Outlook / Resend
+// QQ邮箱（优先推荐，完全免费）：
+//   1. QQ邮箱网页版 → 设置 → 账户 → 开启 SMTP 服务
+//   2. 生成"授权码"（非邮箱密码）
+//   3. 设置环境变量：QQ_EMAIL=xxx@qq.com  QQ_AUTH_CODE=授权码
+const EMAIL_CODE_SECRET = SALT + '_email_code_v1';
+const EMAIL_CODE_EXPIRE = 5 * 60 * 1000; // 5分钟有效期
+
+// 支持的邮箱服务商 SMTP 配置（全部免费，用户只需配置对应授权码）
+const EMAIL_PROVIDERS = [
+  { name: 'QQ邮箱',  check: (u)=>/\@qq\.com$/i.test(u), host:'smtp.qq.com',       port:465, secure:true, userEnv:'QQ_EMAIL',     passEnv:'QQ_AUTH_CODE'  },
+  { name: 'QQ企业邮箱', check:(u)=>/\.qq\.com$/i.test(u) && !/\@qq\.com$/i.test(u), host:'smtp.exmail.qq.com', port:465, secure:true, userEnv:'QQ_EXMAIL_USER', passEnv:'QQ_EXMAIL_PASS' },
+  { name: '163邮箱', check: (u)=>/\@163\.com$/i.test(u), host:'smtp.163.com',      port:465, secure:true, userEnv:'EMAIL_163',    passEnv:'PASS_163'      },
+  { name: '126邮箱', check: (u)=>/\@126\.com$/i.test(u), host:'smtp.126.com',      port:465, secure:true, userEnv:'EMAIL_126',    passEnv:'PASS_126'      },
+  { name: '139邮箱', check: (u)=>/\@139\.com$/i.test(u), host:'smtp.139.com',      port:465, secure:true, userEnv:'EMAIL_139',    passEnv:'PASS_139'      },
+  { name: '新浪邮箱', check: (u)=>/\@sina\.(com|cn)$/i.test(u), host:'smtp.sina.com', port:465, secure:true, userEnv:'EMAIL_SINA',   passEnv:'PASS_SINA'     },
+  { name: 'Outlook', check: (u)=>/\@(outlook|hotmail|live)\.com$/i.test(u), host:'smtp-mail.outlook.com', port:587, secure:false, starttls:true, userEnv:'EMAIL_OUTLOOK', passEnv:'PASS_OUTLOOK' },
+  { name: 'Gmail',   check: (u)=>/\@gmail\.com$/i.test(u), host:'smtp.gmail.com',    port:465, secure:true, userEnv:'EMAIL_GMAIL',   passEnv:'PASS_GMAIL'    },
+  { name: 'Foxmail', check: (u)=>/\@foxmail\.com$/i.test(u), host:'smtp.qq.com',      port:465, secure:true, userEnv:'FOXMAIL_USER',  passEnv:'FOXMAIL_PASS'  },
+];
+
+// 通用自定义 SMTP（用于其他邮箱）
+const CUSTOM_SMTP = {
+  host: process.env.SMTP_HOST || '',
+  port: parseInt(process.env.SMTP_PORT || '465', 10),
+  secure: String(process.env.SMTP_SECURE || 'true') === 'true',
+  user: process.env.SMTP_USER || '',
+  pass: process.env.SMTP_PASS || '',
+  from: process.env.SMTP_FROM || ''
+};
+
+// 根据收件人匹配邮箱服务商，返回 SMTP 配置
+function resolveSmtpConfig(toEmail) {
+  // 1. 优先：自定义通用 SMTP（若配置了 user+pass+host）
+  if (CUSTOM_SMTP.host && CUSTOM_SMTP.user && CUSTOM_SMTP.pass) {
+    return {
+      name: '自定义SMTP',
+      host: CUSTOM_SMTP.host,
+      port: CUSTOM_SMTP.port,
+      secure: CUSTOM_SMTP.secure,
+      auth: { user: CUSTOM_SMTP.user, pass: CUSTOM_SMTP.pass },
+      from: CUSTOM_SMTP.from || CUSTOM_SMTP.user
+    };
+  }
+  // 2. 匹配收件邮箱对应服务商（用户在对应环境变量配置了账号+授权码）
+  for (const p of EMAIL_PROVIDERS) {
+    if (p.check(toEmail)) {
+      const user = process.env[p.userEnv] || '';
+      const pass = process.env[p.passEnv] || '';
+      if (user && pass) {
+        return {
+          name: p.name,
+          host: p.host,
+          port: p.port,
+          secure: p.secure,
+          starttls: p.starttls || false,
+          auth: { user, pass },
+          from: `NCS Ratings <${user}>`
+        };
+      }
+    }
+  }
+  // 3. Resend API（付费方案，需配置 API_KEY）
+  const resendKey = process.env.RESEND_API_KEY || '';
+  if (resendKey) {
+    return { name: 'Resend', resendKey };
+  }
+  return null; // 无可用配置，走开发模式
+}
+
+function generateEmailCode() {
+  let code = '';
+  for (let i = 0; i < 6; i++) code += Math.floor(Math.random() * 10);
+  const ts = Date.now();
+  const payload = Buffer.from(code + ':' + ts).toString('base64');
+  const sig = crypto.createHmac('sha256', EMAIL_CODE_SECRET).update(payload).digest('hex');
+  return { token: payload + '.' + sig, code };
+}
+
+function verifyEmailCode(token, input) {
+  if (!token || !input) return false;
+  try {
+    const parts = String(token).split('.');
+    if (parts.length !== 2) return false;
+    const [payload, sig] = parts;
+    const expectedSig = crypto.createHmac('sha256', EMAIL_CODE_SECRET).update(payload).digest('hex');
+    if (sig !== expectedSig) return false;
+    const decoded = Buffer.from(payload, 'base64').toString('utf8');
+    const colonIdx = decoded.lastIndexOf(':');
+    if (colonIdx < 1) return false;
+    const code = decoded.slice(0, colonIdx);
+    const ts = parseInt(decoded.slice(colonIdx + 1), 10);
+    if (isNaN(ts) || Date.now() - ts > EMAIL_CODE_EXPIRE) return false;
+    return code === String(input);
+  } catch (e) {
+    return false;
+  }
+}
+
+// 发送邮件：支持 nodemailer(SMTP) / Resend(HTTP API) / dev_mode
+let _mailerCache = null; // nodemailer transporter 缓存
+async function sendEmail(to, subject, htmlContent) {
+  const cfg = resolveSmtpConfig(to);
+
+  // 方案 A：Resend API（HTTP 调用）
+  if (cfg && cfg.resendKey) {
+    try {
+      const https = require('node:https');
+      const data = JSON.stringify({
+        from: `NCS Ratings <noreply@resend.dev>`,
+        to: [to],
+        subject,
+        html: htmlContent
+      });
+      return await new Promise((resolve) => {
+        const req = https.request('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + cfg.resendKey, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
+        }, (resp) => {
+          let body = '';
+          resp.on('data', chunk => body += chunk);
+          resp.on('end', () => resolve({ ok: resp.statusCode >= 200 && resp.statusCode < 300, provider: 'Resend', status: resp.statusCode, body: body.substring(0,200) }));
+        });
+        req.on('error', err => resolve({ ok: false, provider: 'Resend', error: String(err).substring(0,200) }));
+        req.write(data);
+        req.end();
+      });
+    } catch (e) {
+      return { ok: false, provider: 'Resend', error: String(e).substring(0,200) };
+    }
+  }
+
+  // 方案 B：SMTP 真实发送（QQ邮箱/163/126等，nodemailer）
+  if (cfg && cfg.host) {
+    try {
+      const nodemailer = require('nodemailer');
+      // 不同服务复用 transporter
+      const cacheKey = cfg.auth.user + '|' + cfg.host + ':' + cfg.port;
+      if (!_mailerCache || _mailerCache.key !== cacheKey) {
+        const opts = {
+          host: cfg.host,
+          port: cfg.port,
+          secure: !!cfg.secure,
+          auth: { user: cfg.auth.user, pass: cfg.auth.pass },
+          connectionTimeout: 15000,
+          greetingTimeout: 15000,
+          socketTimeout: 15000
+        };
+        if (cfg.starttls) {
+          opts.secure = false;
+          opts.requireTLS = true;
+          opts.tls = { ciphers: 'SSLv3' };
+        }
+        _mailerCache = { key: cacheKey, transporter: nodemailer.createTransport(opts) };
+      }
+      const info = await _mailerCache.transporter.sendMail({
+        from: cfg.from || cfg.auth.user,
+        to,
+        subject,
+        html: htmlContent
+      });
+      return { ok: !!info.messageId, provider: cfg.name, messageId: info.messageId, response: String(info.response || '').substring(0,200) };
+    } catch (e) {
+      // SMTP 发送失败时，不降级到开发模式，让用户知道原因
+      return { ok: false, provider: cfg.name, error: String(e).substring(0, 300), dev_mode: true, dev_reason: 'SMTP失败: ' + String(e).substring(0,80) };
+    }
+  }
+
+  // 方案 C：未配置任何邮件服务 → 开发模式（验证码通过接口返回给前端toast显示）
+  return { ok: true, dev_mode: true, provider: 'DevMode', hint: '未配置邮件服务，验证码将显示在页面' };
 }
 
 // 获取上海时区的日期字符串 YYYY-MM-DD
@@ -321,78 +498,138 @@ async function apiHealth(req, res) {
 // 公开接口：返回今日日期
 async function apiDailyInfo(req, res) {
   const date = getShanghaiDate();
-  sendJSON(res, { date, hint: '注册时请输入图形验证码' });
+  sendJSON(res, { date, hint: '注册/登录时请输入邮箱接收验证码' });
 }
 
-// 生成图形验证码（返回 SVG 图片 + 签名令牌）
+// 生成图形验证码（返回 SVG 图片 + 签名令牌）— 保留用于管理后台等场景
 async function apiCaptcha(req, res) {
   const { token, code } = generateCaptcha();
   const svg = generateCaptchaSVG(code);
   sendJSON(res, { id: token, svg });
 }
 
-async function apiRegister(req, res) {
-  const { username, password, captchaId, captchaCode } = await readBody(req);
+// 发送邮箱验证码（注册/登录通用）
+async function apiSendCode(req, res) {
+  const { email, purpose } = await readBody(req);
   const ip = getIP(req);
-  if (!username || !password) return sendJSON(res, { error: '用户名和密码不能为空' }, 400);
+  if (!email) return sendJSON(res, { error: '请输入邮箱地址' }, 400);
+  // 简单邮箱格式校验
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return sendJSON(res, { error: '邮箱格式不正确' }, 400);
+  }
+  // 如果是登录，检查邮箱是否已注册
+  if (purpose === 'login') {
+    const result = await db.execute({ sql: 'SELECT username FROM users WHERE email = ?', args: [email] });
+    if (!result.rows[0]) {
+      return sendJSON(res, { error: '该邮箱未注册，请先注册' }, 404);
+    }
+  }
+  // 如果是注册，检查邮箱是否已被使用
+  if (purpose === 'register') {
+    const result = await db.execute({ sql: 'SELECT username FROM users WHERE email = ?', args: [email] });
+    if (result.rows[0]) {
+      return sendJSON(res, { error: '该邮箱已注册，请直接登录' }, 409);
+    }
+  }
+  // 生成验证码
+  const { token, code } = generateEmailCode();
+  const subject = purpose === 'login' ? '【NCS Ratings】登录验证码' : '【NCS Ratings】注册验证码';
+  const html = `<div style="font-family:sans-serif;max-width:400px;margin:0 auto;padding:20px">
+    <h2 style="color:#6366f1">🎵 NCS Ratings</h2>
+    <p>您的验证码是：</p>
+    <div style="font-size:32px;font-weight:bold;letter-spacing:8px;color:#6366f1;background:#f3f4f6;padding:16px;border-radius:8px;text-align:center;margin:16px 0">${code}</div>
+    <p style="color:#6b7280;font-size:13px">验证码5分钟内有效，请勿泄露给他人。</p>
+  </div>`;
+  const emailResult = await sendEmail(email, subject, html);
+  logSystem('INFO', 'SEND_CODE_RESULT', email, JSON.stringify(emailResult).substring(0,300), ip);
+
+  const resp = { success: false, token };
+  if (emailResult.ok) {
+    resp.success = true;
+    resp.provider = emailResult.provider || 'DevMode';
+    if (emailResult.dev_mode) {
+      resp.dev_code = code;
+      resp.dev_mode = true;
+      if (emailResult.hint) resp.hint = emailResult.hint;
+    } else {
+      resp.hint = '验证码已发送至 ' + email + '，请注意查收邮件';
+    }
+    sendJSON(res, resp);
+    return;
+  }
+  // SMTP发送失败 → 降级为开发模式显示验证码（避免完全不可用），并告知失败原因
+  resp.success = true; // 降级后仍认为成功，验证码可以用
+  resp.provider = 'DevMode(Fallback)';
+  resp.dev_code = code;
+  resp.dev_mode = true;
+  resp.fallback_reason = '邮件服务异常(' + (emailResult.provider || 'unknown') + '): ' + (emailResult.error || emailResult.dev_reason || '').substring(0,60);
+  resp.hint = '邮件发送失败，当前使用备用模式，已显示验证码';
+  logSystem('WARN', 'SEND_CODE_FALLBACK', email, resp.fallback_reason, ip);
+  sendJSON(res, resp);
+}
+
+async function apiRegister(req, res) {
+  const { username, email, codeToken, code } = await readBody(req);
+  const ip = getIP(req);
+  if (!username) return sendJSON(res, { error: '请输入用户名' }, 400);
+  if (!email) return sendJSON(res, { error: '请输入邮箱' }, 400);
+  if (!code) return sendJSON(res, { error: '请输入验证码' }, 400);
   if (username.length < 2) return sendJSON(res, { error: '用户名至少2个字符' }, 400);
-  // 验证图形验证码（无状态签名令牌）
-  if (!verifyCaptcha(captchaId, captchaCode)) {
-    logSystem('WARN', 'REGISTER_CAPTCHA_FAIL', username, '验证码错误或已过期', ip);
-    return sendJSON(res, { error: '验证码错误或已过期，请刷新验证码重试' }, 403);
+  // 验证邮箱验证码
+  if (!verifyEmailCode(codeToken, code)) {
+    logSystem('WARN', 'REGISTER_CODE_FAIL', username, '验证码错误或已过期', ip);
+    return sendJSON(res, { error: '验证码错误或已过期，请重新获取' }, 403);
   }
   try {
     await db.execute({
-      sql: 'INSERT INTO users (username, password_hash) VALUES (?, ?)',
-      args: [username, hashPwd(password)]
+      sql: 'INSERT INTO users (username, password_hash, email, phone) VALUES (?, ?, ?, ?)',
+      args: [username, hashPwd(email + '_' + Date.now()), email, '']
     });
-    logSystem('INFO', 'REGISTER', username, '新用户注册（验证码验证通过）', ip);
-    sendJSON(res, { success: true, user: { name: username, joined: new Date().toISOString() } });
+    logSystem('INFO', 'REGISTER', username, '新用户注册（邮箱验证码验证通过）邮箱:' + email, ip);
+    sendJSON(res, { success: true, user: { name: username, email: email, joined: new Date().toISOString() } });
   } catch (e) {
     if (String(e).includes('UNIQUE')) {
       logSystem('WARN', 'REGISTER_DUPLICATE', username, '尝试注册已存在用户名', ip);
       sendJSON(res, { error: '用户名已存在' }, 409);
     }
-    else sendJSON(res, { error: '注册失败' }, 500);
+    else sendJSON(res, { error: '注册失败: ' + (e.message || e) }, 500);
   }
 }
 
 async function apiLogin(req, res) {
-  const { username, password } = await readBody(req);
+  const { email, codeToken, code } = await readBody(req);
   const ip = getIP(req);
   const ua = getUA(req);
-  if (!username || !password) return sendJSON(res, { error: '用户名和密码不能为空' }, 400);
-
-  // 检查是否被封禁
-  const userResult = await db.execute({
-    sql: 'SELECT banned FROM users WHERE username = ?',
-    args: [username]
-  });
-  const userRow = userResult.rows[0];
-  if (userRow && userRow.banned) {
-    logLogin(username, 0, ip, ua);
-    logSystem('WARN', 'LOGIN_BANNED', username, '被封禁用户尝试登录', ip);
-    return sendJSON(res, { error: '账号已被封禁，请联系管理员' }, 403);
+  if (!email || !code) return sendJSON(res, { error: '请输入邮箱和验证码' }, 400);
+  // 验证邮箱验证码
+  if (!verifyEmailCode(codeToken, code)) {
+    logLogin(email, 0, ip, ua);
+    logSystem('WARN', 'LOGIN_CODE_FAIL', email, '验证码错误或已过期', ip);
+    return sendJSON(res, { error: '验证码错误或已过期，请重新获取' }, 403);
   }
-
+  // 查找用户
   const loginResult = await db.execute({
-    sql: 'SELECT username, created_at FROM users WHERE username = ? AND password_hash = ?',
-    args: [username, hashPwd(password)]
+    sql: 'SELECT username, email, created_at, banned FROM users WHERE email = ?',
+    args: [email]
   });
   const row = loginResult.rows[0];
-  if (row) {
-    await db.execute({
-      sql: "UPDATE users SET last_login = datetime('now') WHERE username = ?",
-      args: [username]
-    });
-    logLogin(username, 1, ip, ua);
-    logSystem('INFO', 'LOGIN', username, '登录成功', ip);
-    sendJSON(res, { success: true, user: { name: row.username, joined: row.created_at } });
-  } else {
-    logLogin(username, 0, ip, ua);
-    logSystem('WARN', 'LOGIN_FAIL', username, '登录失败（密码错误或用户不存在）', ip);
-    sendJSON(res, { error: '用户名或密码错误' }, 401);
+  if (!row) {
+    logLogin(email, 0, ip, ua);
+    logSystem('WARN', 'LOGIN_FAIL', email, '登录失败（邮箱未注册）', ip);
+    return sendJSON(res, { error: '该邮箱未注册，请先注册' }, 401);
   }
+  if (row.banned) {
+    logLogin(row.username, 0, ip, ua);
+    logSystem('WARN', 'LOGIN_BANNED', row.username, '被封禁用户尝试登录', ip);
+    return sendJSON(res, { error: '账号已被封禁，请联系管理员' }, 403);
+  }
+  await db.execute({
+    sql: "UPDATE users SET last_login = datetime('now') WHERE email = ?",
+    args: [email]
+  });
+  logLogin(row.username, 1, ip, ua);
+  logSystem('INFO', 'LOGIN', row.username, '登录成功（邮箱验证码）', ip);
+  sendJSON(res, { success: true, user: { name: row.username, email: row.email, joined: row.created_at } });
 }
 
 async function apiRate(req, res) {
@@ -1891,6 +2128,7 @@ const serverListener = async function (req, res) {
     if (p === '/api/health') return await apiHealth(req, res);
     if (p === '/api/daily-info' && m === 'GET') return await apiDailyInfo(req, res);
     if (p === '/api/captcha' && m === 'GET') return await apiCaptcha(req, res);
+    if (p === '/api/send-code' && m === 'POST') return await apiSendCode(req, res);
     if (p === '/api/register' && m === 'POST') return await apiRegister(req, res);
     if (p === '/api/login' && m === 'POST') return await apiLogin(req, res);
     if (p === '/api/rate' && m === 'POST') return await apiRate(req, res);

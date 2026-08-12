@@ -1724,9 +1724,15 @@ body.has-tabbar .player{bottom:54px}
     <div class="modal-body">
       <form class="form" id="loginForm" onsubmit="event.preventDefault();app.login();">
         <h3>欢迎回来 👋</h3>
-        <p class="sub">登录后可以评分和评论</p>
-        <div class="field"><label>用户名</label><input id="loginUser" required maxlength="20" autocomplete="username"></div>
-        <div class="field"><label>密码</label><input id="loginPass" type="password" required maxlength="40" autocomplete="current-password"></div>
+        <p class="sub">输入邮箱接收验证码登录</p>
+        <div class="field"><label>📧 邮箱</label><input id="loginEmail" type="email" required maxlength="60" placeholder="输入注册邮箱" autocomplete="email"></div>
+        <div class="field">
+          <label>🔑 验证码</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="loginCode" required maxlength="6" placeholder="6位验证码" style="flex:1;letter-spacing:2px" autocomplete="one-time-code">
+            <button type="button" id="btnSendLoginCode" class="btn" style="height:42px;padding:0 16px;border-radius:8px;background:var(--accent);color:#fff;font-weight:700;font-size:13px;flex-shrink:0;cursor:pointer;border:none">发送验证码</button>
+          </div>
+        </div>
         <button type="submit" class="btn btn-accent" style="justify-content:center;height:44px;font-size:14px;border-radius:12px">登录账号</button>
         <p style="text-align:center;color:var(--text-4);font-size:12.5px">
           还没有账号？<a href="#" onclick="app.openModal('registerModal');return false;" style="color:var(--accent);font-weight:700">立即注册 →</a>
@@ -1747,19 +1753,16 @@ body.has-tabbar .player{bottom:54px}
       <form class="form" id="regForm" onsubmit="event.preventDefault();app.register();">
         <h3>创建你的账号 🎧</h3>
         <p class="sub">加入社区，对 NCS 歌曲进行评分评论</p>
-        <div class="field"><label>用户名</label><input id="regUser" required minlength="2" maxlength="20" placeholder="2-20 个字符"></div>
-        <div class="field"><label>设置密码</label><input id="regPass" type="password" required minlength="4" maxlength="40" placeholder="至少 4 个字符"></div>
-        <div class="field"><label>确认密码</label><input id="regPass2" type="password" required maxlength="40"></div>
+        <div class="field"><label>👤 用户名</label><input id="regUser" required minlength="2" maxlength="20" placeholder="2-20 个字符"></div>
+        <div class="field"><label>📧 邮箱</label><input id="regEmail" type="email" required maxlength="60" placeholder="输入邮箱接收验证码" autocomplete="email"></div>
         <div class="field">
-          <label>🔐 图形验证码</label>
+          <label>🔑 验证码</label>
           <div style="display:flex;gap:8px;align-items:center">
-            <input id="regCode" required maxlength="4" placeholder="输入右侧验证码" style="flex:1;text-transform:uppercase;letter-spacing:2px">
-            <div id="captchaImg" onclick="App.loadCaptcha()" style="cursor:pointer;width:160px;height:50px;border-radius:8px;overflow:hidden;background:var(--bg-2);border:1px solid var(--bg-3);display:flex;align-items:center;justify-content:center;flex-shrink:0" title="点击刷新验证码">
-              <span style="color:var(--text-4);font-size:11px">点击加载</span>
-            </div>
+            <input id="regCode" required maxlength="6" placeholder="6位验证码" style="flex:1;letter-spacing:2px" autocomplete="one-time-code">
+            <button type="button" id="btnSendRegCode" class="btn" style="height:42px;padding:0 16px;border-radius:8px;background:var(--accent);color:#fff;font-weight:700;font-size:13px;flex-shrink:0;cursor:pointer;border:none">发送验证码</button>
           </div>
           <div style="margin-top:6px;font-size:11px;color:var(--text-4);line-height:1.6">
-            💡 输入图片中的4位验证码（不区分大小写），点击图片可刷新
+            💡 验证码将发送到你的邮箱，5分钟内有效
           </div>
         </div>
         <button type="submit" class="btn btn-accent" style="justify-content:center;height:44px;font-size:14px;border-radius:12px">创建账号</button>
@@ -1885,25 +1888,15 @@ const API = {
     if(this.online){ el.className="db-status online"; el.innerHTML='<span class="db-dot"></span> 数据库已连接'; }
     else { el.className="db-status offline"; el.innerHTML='<span class="db-dot"></span> 本地模式'; }
   },
-  async register(name, pass, captchaCode){
-    // 使用 _fetchRaw 以获取服务器返回的具体错误（如"用户名已存在"）
-    return await this._fetchRaw("/api/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:name,password:pass,captchaId:this._captchaId||"",captchaCode:captchaCode||""})});
+  async register(username, email, codeToken, code){
+    return await this._fetchRaw("/api/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username,email,codeToken,code})});
   },
-  // 加载图形验证码
-  async loadCaptcha(){
-    try{
-      const r=await fetch(`${API_BASE}/api/captcha`);
-      const data=await r.json();
-      if(data.svg){
-        this._captchaId=data.id;
-        const img=$("#captchaImg");
-        if(img){img.innerHTML=data.svg;}
-      }
-    }catch(e){/* ignore */}
+  async login(email, codeToken, code){
+    return await this._fetchRaw("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,codeToken,code})});
   },
-  async login(name, pass){
-    // 使用 _fetchRaw 以获取服务器返回的具体错误（如"用户名或密码错误"）
-    return await this._fetchRaw("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:name,password:pass})});
+  // 发送邮箱验证码
+  async sendCode(email, purpose){
+    return await this._fetchRaw("/api/send-code",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,purpose})});
   },
   async rate(username, audioUrl, vote){
     this._fetch("/api/rate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username,audioUrl,vote})});
@@ -2458,7 +2451,15 @@ const app = {
     };
     document.addEventListener("click", ()=>{ this.userOpen = false; $("#userMenu").classList.remove("open"); });
     $("#btnLogin").onclick = ()=> this.openModal("loginModal");
-    $("#btnRegister").onclick = ()=> { this.openModal("registerModal"); this.loadCaptcha(); };
+    $("#btnRegister").onclick = ()=> this.openModal("registerModal");
+    $("#btnSendRegCode").onclick = ()=> {
+      const email = $("#regEmail").value.trim();
+      this.sendCode(email, 'register', 'btnSendRegCode');
+    };
+    $("#btnSendLoginCode").onclick = ()=> {
+      const email = $("#loginEmail").value.trim();
+      this.sendCode(email, 'login', 'btnSendLoginCode');
+    };
     $("#btnLogout").onclick = ()=> this.logout();
     $("#gotoProfile").onclick = ()=> this.openProfile();
     $("#gotoFeedback").onclick = ()=> this.openFeedback();
@@ -2929,55 +2930,103 @@ const app = {
   },
 
   // ========== AUTH ==========
-  openModal(id){ $("#"+id).classList.add("open"); if(id==="loginModal") setTimeout(()=>$("#loginUser")&&$("#loginUser").focus(),120); },
+  openModal(id){ $("#"+id).classList.add("open"); if(id==="loginModal") setTimeout(()=>$("#loginEmail")&&$("#loginEmail").focus(),120); },
   closeModal(id){ $("#"+id).classList.remove("open"); },
   async login(){
-    const u=$("#loginUser").value.trim(), p=$("#loginPass").value;
-    if(!u||!p){ showToast("❌ 请输入用户名和密码",2200); return; }
+    const email=$("#loginEmail").value.trim(), code=$("#loginCode").value.trim();
+    if(!email){ showToast("❌ 请输入邮箱",2200); return; }
+    if(!code){ showToast("❌ 请输入验证码",2200); return; }
+    if(!this._loginCodeToken){ showToast("❌ 请先获取验证码",2200); return; }
     showToast("⏳ 正在验证...",1200);
-    // 先走服务器 API 验证
-    const apiRes = await API.login(u, p);
+    const apiRes = await API.login(email, this._loginCodeToken, code);
     if(apiRes && apiRes.success){
-      // 服务器验证成功，同步到本地缓存
-      const user = {name: u, pass: p, phone:"", createdAt: Date.now(), avatar:AVATAR_SET[hashStr(u) % AVATAR_SET.length]};
-      // 如果服务器返回了注册时间，用它
+      const u = apiRes.user.name;
+      const user = {name: u, email: email, createdAt: Date.now(), avatar:AVATAR_SET[hashStr(u) % AVATAR_SET.length]};
       if(apiRes.user && apiRes.user.joined) user.createdAt = new Date(apiRes.user.joined).getTime() || Date.now();
-      // 确保本地也有这个用户（降级用）
       const all = Users.get();
       if(!all[u.toLowerCase()]){ all[u.toLowerCase()] = user; Users.set(all); }
-      Session.set(user); this.refreshUser(); this.closeModal("loginModal"); $("#loginPass").value="";
+      Session.set(user); this.refreshUser(); this.closeModal("loginModal");
+      $("#loginCode").value=""; this._loginCodeToken=null;
       showToast("👋 欢迎回来，"+esc(user.name)+"！", 2200); this.renderHome();
     } else {
-      // 服务器验证失败
-      const msg = apiRes && apiRes.error ? apiRes.error : "用户名或密码错误";
+      const msg = apiRes && apiRes.error ? apiRes.error : "登录失败";
       showToast("❌ "+msg, 2500);
     }
   },
   async register(){
-    const u=$("#regUser").value.trim(), p=$("#regPass").value, p2=$("#regPass2").value, code=$("#regCode").value.trim();
-    if(p !== p2){ showToast("❌ 两次输入的密码不一致",2200); return; }
+    const u=$("#regUser").value.trim(), email=$("#regEmail").value.trim(), code=$("#regCode").value.trim();
     if(u.length < 2){ showToast("❌ 用户名至少2个字符",2200); return; }
-    if(p.length < 4){ showToast("❌ 密码至少4个字符",2200); return; }
+    if(!email){ showToast("❌ 请输入邮箱",2200); return; }
     if(!code){ showToast("❌ 请输入验证码",2200); return; }
+    if(!this._regCodeToken){ showToast("❌ 请先获取验证码",2200); return; }
     showToast("⏳ 正在注册...",1200);
-    // 先走服务器 API 注册（服务端防重名 + 验证码验证）
-    const apiRes = await API.register(u, p, code);
+    const apiRes = await API.register(u, email, this._regCodeToken, code);
     if(apiRes && apiRes.success){
-      // 服务器注册成功，同步到本地缓存
-      const user = {name: u, pass: p, phone:"", createdAt: Date.now(), avatar:AVATAR_SET[hashStr(u) % AVATAR_SET.length]};
+      const user = {name: u, email: email, createdAt: Date.now(), avatar:AVATAR_SET[hashStr(u) % AVATAR_SET.length]};
       if(apiRes.user && apiRes.user.joined) user.createdAt = new Date(apiRes.user.joined).getTime() || Date.now();
       const all = Users.get();
       all[u.toLowerCase()] = user; Users.set(all);
       Session.set(user); this.refreshUser(); this.closeModal("registerModal");
-      $("#regPass").value=""; $("#regPass2").value=""; $("#regCode").value="";
+      $("#regCode").value=""; this._regCodeToken=null;
       showToast("🎉 注册成功，欢迎 "+esc(user.name)+"！", 2500); this.renderHome();
     } else {
-      // 服务器注册失败（可能是重名或验证码错误）
       const msg = apiRes && apiRes.error ? apiRes.error : "注册失败";
       showToast("❌ "+msg, 2500);
-      // 注册失败后刷新验证码
-      this.loadCaptcha();
-      $("#regCode").value="";
+    }
+  },
+  // 发送验证码（注册/登录通用）
+  _codeCountdown: 0,
+  _codeTimer: null,
+  startCodeCountdown(btnId){
+    const btn=$("#"+btnId);
+    if(!btn) return;
+    this._codeCountdown = 60;
+    btn.disabled = true;
+    btn.style.opacity = "0.6";
+    btn.style.cursor = "not-allowed";
+    const self = this;
+    this._codeTimer = setInterval(()=>{
+      self._codeCountdown--;
+      if(self._codeCountdown <= 0){
+        clearInterval(self._codeTimer);
+        btn.disabled = false;
+        btn.style.opacity = "1";
+        btn.style.cursor = "pointer";
+        btn.textContent = "发送验证码";
+      } else {
+        btn.textContent = self._codeCountdown + "s 后重发";
+      }
+    }, 1000);
+  },
+  async sendCode(email, purpose, btnId){
+    if(!email){ showToast("❌ 请先输入邮箱",2200); return; }
+    const btn=$("#"+btnId);
+    if(btn) { btn.disabled=true; btn.textContent="发送中..."; }
+    const apiRes = await API.sendCode(email, purpose);
+    if(apiRes && apiRes.success){
+      if(purpose === 'register'){
+        this._regCodeToken = apiRes.token;
+      } else {
+        this._loginCodeToken = apiRes.token;
+      }
+      // 根据服务端返回的模式显示相应提示
+      if (apiRes.hint) {
+        if (apiRes.dev_mode && apiRes.dev_code) {
+          // 开发模式：直接显示验证码 + 提示信息
+          showToast("📧 验证码: "+apiRes.dev_code+" | "+apiRes.hint, 8000);
+        } else {
+          showToast("✅ "+apiRes.hint, 3500);
+        }
+      } else if (apiRes.dev_mode && apiRes.dev_code) {
+        showToast("📧 验证码: "+apiRes.dev_code+"（备用模式）", 6000);
+      } else {
+        showToast("✅ 验证码已发送到邮箱", 2500);
+      }
+      this.startCodeCountdown(btnId);
+    } else {
+      const msg = apiRes && apiRes.error ? apiRes.error : "发送失败";
+      showToast("❌ "+msg, 2500);
+      if(btn) { btn.disabled=false; btn.textContent="发送验证码"; }
     }
   },
   logout(){
@@ -3084,7 +3133,7 @@ const app = {
 
   // ========== FEEDBACK (反馈系统) ==========
   openFeedback(){
-    const u = Session.get();
+    const u = Session.currentUser();
     if(!u){ showToast("🔐 请先登录",2200); this.openModal("loginModal"); return; }
     $("#feedbackMsg").value=""; $("#feedbackCount").textContent="0";
     $("#feedbackFile").value="";
@@ -3092,7 +3141,7 @@ const app = {
     this.loadFeedbackHistory();
   },
   async loadFeedbackHistory(){
-    const u=Session.get(); if(!u) return;
+    const u=Session.currentUser(); if(!u) return;
     const list=$("#feedbackList");
     list.innerHTML='<div style="color:var(--text-4);font-size:13px">加载中...</div>';
     try{
@@ -3114,7 +3163,7 @@ const app = {
     }catch(e){list.innerHTML='<div style="color:var(--text-4);font-size:13px">加载失败</div>'}
   },
   async submitFeedback(){
-    const u=Session.get(); if(!u){showToast("🔐 请先登录",2200);return}
+    const u=Session.currentUser(); if(!u){showToast("🔐 请先登录",2200);return}
     const msg=$("#feedbackMsg").value.trim();
     if(!msg){showToast("❌ 请输入反馈内容",2200);return}
     if(msg.length>1000){showToast("❌ 反馈内容不能超过1000字",2200);return}
@@ -3165,7 +3214,7 @@ const app = {
       </div>
     </div>`;
     $("#btnNewPost").onclick=()=>{
-      const u=Session.get();
+      const u=Session.currentUser();
       if(!u){showToast("🔐 请先登录再发帖",2200);this.openModal("loginModal");return}
       const box=$("#communityPostBox");
       box.style.display=box.style.display==="none"?"block":"none";
@@ -3235,7 +3284,7 @@ const app = {
     $("#postBackBtn").onclick = ()=> this.renderCommunity();
   },
   async submitCommunityPost(){
-    const u=Session.get(); if(!u){showToast("🔐 请先登录",2200);return}
+    const u=Session.currentUser(); if(!u){showToast("🔐 请先登录",2200);return}
     const content=$("#postContent").value.trim();
     if(!content){showToast("❌ 请输入内容",2200);return}
     if(content.length>300){showToast("❌ 内容不能超过300字",2200);return}
@@ -3421,6 +3470,7 @@ const app = {
 
 // ========== BOOTSTRAP ==========
 window.app = app;
+window.api = API;
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => { app.init(); });
 } else {

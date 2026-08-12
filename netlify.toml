@@ -1,6 +1,6 @@
 [build]
   publish = "."
-  command = "npm install --cache /tmp/ncs-npm-cache-$(date +%s) 2>&1 | tail -5"
+  command = "npm install"
   functions = "netlify/functions"
 
 # API 路由 → Netlify Function
