@@ -492,7 +492,20 @@ function shortUrl(u) {
 // ============ API HANDLERS ============
 
 async function apiHealth(req, res) {
-  sendJSON(res, { ok: true, time: new Date().toISOString(), db: TURSO_URL });
+  const qqEmail = process.env.QQ_EMAIL || '';
+  const qqPass = process.env.QQ_AUTH_CODE || '';
+  sendJSON(res, {
+    ok: true,
+    time: new Date().toISOString(),
+    db: TURSO_URL,
+    ver: '20260812-v12-qq-smtp',
+    email_cfg: {
+      qq_email_set: !!qqEmail,
+      qq_email_value: qqEmail ? qqEmail.substring(0,4) + '***@qq.com' : '(unset)',
+      qq_pass_set: !!qqPass,
+      qq_pass_len: qqPass.length
+    }
+  });
 }
 
 // 公开接口：返回今日日期
