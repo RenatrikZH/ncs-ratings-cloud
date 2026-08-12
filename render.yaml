@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: ncs-ratings-api
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    rootDir: .
+    buildCommand: npm install
+    startCommand: node __db_server_cloud.cjs
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: TURSO_URL
+        sync: false
+      - key: TURSO_TOKEN
+        sync: false
+      - key: NODE_VERSION
+        value: "20"

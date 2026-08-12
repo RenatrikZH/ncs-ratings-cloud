@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>NCS 每日邀请码查看器 · 离线版</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  background:#0a0a0b;
+  color:#f5f5f7;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;
+  display:flex;align-items:center;justify-content:center;
+  background-image:
+    radial-gradient(1000px 500px at 90% -10%, rgba(168,85,247,0.08), transparent 60%),
+    radial-gradient(800px 400px at -10% 30%, rgba(34,197,94,0.06), transparent 60%);
+  background-attachment:fixed;
+  padding:20px;
+}
+.card{
+  width:100%;max-width:480px;
+  background:linear-gradient(180deg,#131316 0%,#0e0e11 100%);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:20px;
+  padding:32px 28px 28px;
+  box-shadow:0 30px 60px -20px rgba(0,0,0,0.8);
+  position:relative;overflow:hidden;
+}
+.card::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg, rgba(168,85,247,0.06) 0%, transparent 40%, rgba(34,197,94,0.04) 100%);
+  pointer-events:none;
+}
+.brand{
+  display:flex;align-items:center;gap:12px;margin-bottom:24px;position:relative;
+}
+.brand-logo{
+  width:44px;height:44px;border-radius:12px;
+  background:linear-gradient(145deg,#a855f7,#7c3aed);
+  display:flex;align-items:center;justify-content:center;font-size:20px;
+  box-shadow:0 4px 14px rgba(168,85,247,0.35);
+}
+.brand-name{font-weight:800;font-size:17px;letter-spacing:-0.2px}
+.brand-name small{display:block;font-size:10.5px;color:#71717a;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;margin-top:3px}
+.date-box{
+  background:rgba(168,85,247,0.08);
+  border:1px solid rgba(168,85,247,0.18);
+  border-radius:12px;
+  padding:14px 18px;
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:22px;
+}
+.date-label{font-size:11px;color:#a1a1aa;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.date-value{font-size:18px;font-weight:800;color:#c084fc;letter-spacing:0.5px}
+.countdown{
+  font-size:11px;color:#71717a;font-weight:600;margin-top:3px;
+}
+.code-display{
+  background:linear-gradient(180deg,#1a1a20 0%,#14141a 100%);
+  border:1px solid rgba(255,255,255,0.09);
+  border-radius:16px;
+  padding:28px 20px;
+  text-align:center;
+  position:relative;
+  margin-bottom:18px;
+}
+.code-label{
+  font-size:11px;color:#71717a;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+  margin-bottom:14px;
+}
+.code-main{
+  font-family:'SF Mono','Consolas','Menlo',monospace;
+  font-size:30px;font-weight:900;letter-spacing:4px;
+  background:linear-gradient(180deg,#fff 0%,#a1a1aa 100%);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  user-select:all;cursor:text;
+  line-height:1.2;
+}
+.code-sub{
+  margin-top:12px;
+  font-size:11.5px;color:#52525b;font-weight:600;letter-spacing:0.5px;
+}
+.actions{display:flex;gap:10px;margin-bottom:20px}
+.btn{
+  flex:1;height:42px;border-radius:11px;border:none;cursor:pointer;
+  font-weight:700;font-size:13px;display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  transition:all .18s cubic-bezier(0.22,1,0.36,1);
+  letter-spacing:0.3px;
+}
+.btn.primary{
+  background:linear-gradient(180deg,#a855f7 0%,#7c3aed 100%);
+  color:#fff;
+  box-shadow:0 2px 14px rgba(168,85,247,0.35), inset 0 1px 0 rgba(255,255,255,0.15);
+}
+.btn.primary:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(168,85,247,0.45)}
+.btn.ghost{
+  background:rgba(255,255,255,0.04);
+  color:#d4d4d8;
+  border:1px solid rgba(255,255,255,0.08);
+}
+.btn.ghost:hover{background:rgba(255,255,255,0.07);color:#fff;border-color:rgba(255,255,255,0.12)}
+.btn.copied{background:rgba(34,197,94,0.15);color:#4ade80;border-color:rgba(34,197,94,0.3)}
+
+.future-section{
+  border-top:1px solid rgba(255,255,255,0.06);
+  padding-top:20px;
+}
+.future-title{
+  font-size:12px;color:#71717a;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+  margin-bottom:12px;display:flex;align-items:center;gap:6px;
+}
+.future-list{
+  display:grid;gap:8px;
+}
+.future-item{
+  display:flex;align-items:center;justify-content:space-between;
+  background:rgba(255,255,255,0.025);
+  border:1px solid rgba(255,255,255,0.05);
+  border-radius:10px;
+  padding:10px 14px;
+}
+.future-date{font-size:12px;font-weight:600;color:#a1a1aa}
+.future-date.today{color:#c084fc}
+.future-code{
+  font-family:'SF Mono','Consolas',monospace;
+  font-size:12.5px;font-weight:700;color:#d4d4d8;letter-spacing:1.5px;
+}
+
+.footer{
+  margin-top:22px;padding-top:18px;border-top:1px solid rgba(255,255,255,0.06);
+  text-align:center;
+}
+.footer-tip{font-size:10.5px;color:#52525b;font-weight:600;line-height:1.7}
+.footer-tip b{color:#71717a}
+.offline-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  background:rgba(34,197,94,0.1);color:#4ade80;
+  padding:4px 10px;border-radius:99px;font-size:10.5px;font-weight:700;
+  margin-bottom:14px;
+}
+.offline-dot{width:6px;height:6px;border-radius:50%;background:#22c55e;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+@media(max-width:480px){
+  .card{padding:24px 20px 22px;border-radius:16px}
+  .code-main{font-size:22px;letter-spacing:2.5px}
+  .actions{flex-direction:column}
+}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="brand">
+    <div class="brand-logo">🔐</div>
+    <div class="brand-name">
+      NCS 每日邀请码
+      <small>Offline Viewer · 离线专用</small>
+    </div>
+  </div>
+
+  <div style="text-align:center">
+    <span class="offline-badge"><span class="offline-dot"></span> 完全离线运行 · 无需联网</span>
+  </div>
+
+  <div class="date-box">
+    <div>
+      <div class="date-label">📅 当前日期（上海时区）</div>
+      <div class="date-value" id="dateText">加载中...</div>
+      <div class="countdown" id="countdownText">—</div>
+    </div>
+  </div>
+
+  <div class="code-display">
+    <div class="code-label">🎫 今日邀请码 · Daily Code</div>
+    <div class="code-main" id="codeText">———— ———— ———— ————</div>
+    <div class="code-sub">16 位动态密码，每天 00:00 自动更新</div>
+  </div>
+
+  <div class="actions">
+    <button class="btn primary" onclick="copyCode()">📋 复制邀请码</button>
+    <button class="btn ghost" onclick="refresh()">🔄 刷新</button>
+  </div>
+
+  <div class="future-section">
+    <div class="future-title">📆 未来 7 天密码预览</div>
+    <div class="future-list" id="futureList">
+      <div class="future-item"><div class="future-date">计算中...</div></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-tip">
+      <b>使用方法：</b>复制上方邀请码 → 粘贴到网站注册页面的"邀请码"框 → 完成注册<br>
+      <b>格式：</b>XXXX-XXXX-XXXX-XXXX（不区分大小写，连字符和空格可省略）
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   与后端 __db_server.cjs 中完全一致的算法
+   —— 密钥、日期格式、Base32 字符表、位运算 100% 相同 ——
+   ========================================================= */
+const DAILY_CODE_SECRET = 'NCS-DAILY-CODE-SECRET-2026-v1-神级后台专属密钥';
+const BASE32_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+// 获取上海时区的日期字符串 YYYY-MM-DD
+function getShanghaiDate(offsetDays) {
+  offsetDays = offsetDays || 0;
+  const now = new Date();
+  const shanghai = new Date(now.getTime() + (8 * 60 * 60 * 1000) + (offsetDays * 24 * 60 * 60 * 1000));
+  const y = shanghai.getUTCFullYear();
+  const m = String(shanghai.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(shanghai.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+// 字符串转 Uint8Array（UTF-8 编码）
+function strToBytes(str) {
+  return new TextEncoder().encode(str);
+}
+
+// HMAC-SHA256（使用 Web Crypto API，纯离线）
+async function hmacSha256(keyBytes, dataBytes) {
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' },
+    false, ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', cryptoKey, dataBytes);
+  return new Uint8Array(sig);
+}
+
+// 根据日期字符串生成 16 位邀请码
+async function generateDailyCode(dateStr) {
+  const keyBytes = strToBytes(DAILY_CODE_SECRET);
+  const dataBytes = strToBytes(dateStr || getShanghaiDate(0));
+  const hash = await hmacSha256(keyBytes, dataBytes);
+
+  // 提取 16 组 5-bit 映射到 Base32（与后端位运算完全一致）
+  let code = '';
+  let bitPos = 0;
+  let byteIdx = 0;
+  for (let i = 0; i < 16; i++) {
+    let val = 0;
+    for (let b = 0; b < 5; b++) {
+      val <<= 1;
+      const byte = hash[byteIdx];
+      const bit = (byte >> (7 - bitPos)) & 1;
+      val |= bit;
+      bitPos++;
+      if (bitPos >= 8) { bitPos = 0; byteIdx++; }
+    }
+    code += BASE32_CHARS[val & 31];
+  }
+  return code.slice(0, 4) + '-' + code.slice(4, 8) + '-' + code.slice(8, 12) + '-' + code.slice(12, 16);
+}
+
+// 计算距离次日 00:00（上海时间）的秒数
+function getCountdownText() {
+  const now = new Date();
+  const shanghaiNow = now.getTime() + 8 * 60 * 60 * 1000;
+  const today = new Date(shanghaiNow);
+  today.setUTCHours(24, 0, 0, 0); // 次日 0 点
+  const diffMs = today.getTime() - shanghaiNow;
+  const h = Math.floor(diffMs / 3600000);
+  const m = Math.floor((diffMs % 3600000) / 60000);
+  const s = Math.floor((diffMs % 60000) / 1000);
+  return `⏳ 距离更新还剩 ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+// UI 更新
+async function refresh() {
+  const today = getShanghaiDate(0);
+  document.getElementById('dateText').textContent = today;
+  document.getElementById('countdownText').textContent = getCountdownText();
+
+  const code = await generateDailyCode(today);
+  document.getElementById('codeText').textContent = code;
+
+  // 未来 7 天
+  const list = document.getElementById('futureList');
+  let html = '';
+  for (let i = 1; i <= 7; i++) {
+    const d = getShanghaiDate(i);
+    const c = await generateDailyCode(d);
+    html += `<div class="future-item"><div class="future-date">${d}</div><div class="future-code">${c}</div></div>`;
+  }
+  list.innerHTML = html;
+}
+
+// 复制邀请码
+async function copyCode() {
+  const code = document.getElementById('codeText').textContent.trim();
+  try {
+    await navigator.clipboard.writeText(code);
+    const btns = document.querySelectorAll('.btn');
+    btns[0].textContent = '✅ 已复制！';
+    btns[0].classList.add('copied');
+    btns[0].classList.remove('primary');
+    setTimeout(() => {
+      btns[0].innerHTML = '📋 复制邀请码';
+      btns[0].classList.remove('copied');
+      btns[0].classList.add('primary');
+    }, 1500);
+  } catch (e) {
+    // 兼容：选中文字让用户手动复制
+    const range = document.createRange();
+    range.selectNode(document.getElementById('codeText'));
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+    alert('已选中邀请码，请按 Ctrl+C 复制');
+  }
+}
+
+// 每秒更新倒计时，每 5 秒刷新密码（防止跨天）
+setInterval(() => {
+  document.getElementById('countdownText').textContent = getCountdownText();
+}, 1000);
+setInterval(refresh, 5000);
+
+// 启动
+refresh();
+</script>
+</body>
+</html>

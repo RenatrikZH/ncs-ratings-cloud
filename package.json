@@ -1,0 +1,16 @@
+{
+  "name": "ncs-ratings-server",
+  "version": "2.0.0",
+  "description": "NCS Ratings Cloud Server - Turso + Render",
+  "main": "__db_server_cloud.cjs",
+  "scripts": {
+    "start": "node __db_server_cloud.cjs",
+    "dev": "node __db_server_cloud.cjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.17.4"
+  }
+}

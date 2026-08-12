@@ -1,0 +1,10 @@
+node_modules/
+ncs-database.sqlite
+ncs-database.sqlite-wal
+ncs-database.sqlite-shm
+__tunnel_log.txt
+__tunnel_err.txt
+__watchdog.log
+__current_tunnel_url.txt
+.env
+*.log
