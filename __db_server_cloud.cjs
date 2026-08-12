@@ -1867,8 +1867,14 @@ module.exports.ensureDB = ensureDB;
 const serverListener = async function (req, res) {
   try {
     const parsedUrl = url.parse(req.url, true);
-    const p = parsedUrl.pathname;
+    let p = parsedUrl.pathname;
     const m = req.method;
+    // Netlify Function 路径规范化兜底：如果当前 URL 以 /.netlify/functions 开头，去掉前缀
+    const NF_PREFIX = '/.netlify/functions/api';
+    if (p.startsWith(NF_PREFIX)) {
+      p = p.slice(NF_PREFIX.length) || '/';
+      if (!p.startsWith('/')) p = '/' + p;
+    }
 
     // CORS preflight
     if (m === 'OPTIONS') {

@@ -1267,6 +1267,59 @@ tr:hover td{background:rgba(255,255,255,0.02)}
   .hero h1{font-size:32px}
 }
 
+/* ============ 移动端下拉菜单 + 底部Tab ============ */
+/* 顶栏下拉按钮 */
+.menu-btn{display:none;width:36px;height:36px;border:none;border-radius:8px;background:rgba(255,255,255,0.06);color:var(--text-2);font-size:18px;cursor:pointer;flex-shrink:0;align-items:center;justify-content:center}
+/* 下拉导航面板 */
+.mobile-nav-panel{position:absolute;top:calc(var(--top-h) + 4px);left:8px;right:8px;background:var(--bg-2);border:1px solid var(--bg-3);border-radius:12px;padding:8px;display:none;flex-direction:column;gap:2px;z-index:30;box-shadow:0 8px 30px rgba(0,0,0,0.4)}
+.mobile-nav-panel.open{display:flex}
+.mobile-nav-panel a{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;color:var(--text-2);font-size:13.5px;font-weight:600;text-decoration:none;cursor:pointer}
+.mobile-nav-panel a:active{background:var(--bg-3)}
+.mobile-nav-panel a.active{color:var(--accent);background:rgba(168,85,247,0.08)}
+.mobile-nav-panel .sep{height:1px;background:var(--bg-3);margin:6px 4px}
+.mobile-nav-panel .nav-title{padding:8px 12px 4px;font-size:11px;color:var(--text-4);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+/* 移动端底部Tab导航（微信风格） */
+.mobile-tabbar{display:none;position:fixed;bottom:var(--player-h);left:0;right:0;height:54px;background:rgba(10,10,11,0.96);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--bg-3);z-index:15;flex-direction:row;align-items:center;justify-content:space-around;padding:0 4px}
+.mobile-tabbar .tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;height:100%;color:var(--text-4);cursor:pointer;position:relative;text-decoration:none}
+.mobile-tabbar .tab .ico{font-size:20px;line-height:1}
+.mobile-tabbar .tab .lbl{font-size:10px;font-weight:600}
+.mobile-tabbar .tab.active{color:var(--accent)}
+.mobile-tabbar .tab .dot{position:absolute;top:8px;right:calc(50% - 18px);width:6px;height:6px;border-radius:50%;background:var(--accent)}
+/* 调整内容底部距离，适配底栏 */
+body.has-tabbar .main .content{padding-bottom:calc(24px + 54px)}
+body.has-tabbar .player{bottom:54px}
+
+/* 移动端激活：<1024px（平板/手机） */
+@media (max-width: 1024px){
+  .menu-btn{display:flex}
+  .mobile-tabbar{display:flex}
+  :root{--mobile-tab-h:54px}
+}
+@media (max-width: 480px){
+  .menu-btn{width:32px;height:32px;font-size:16px;border-radius:6px}
+  .mobile-nav-panel{left:6px;right:6px;top:calc(var(--top-h) + 2px);border-radius:10px;padding:6px}
+  .mobile-nav-panel a{padding:9px 10px;font-size:13px;border-radius:6px}
+  .mobile-tabbar{height:50px}
+  .mobile-tabbar .tab .ico{font-size:18px}
+  .mobile-tabbar .tab .lbl{font-size:9.5px}
+  body.has-tabbar .main .content{padding-bottom:calc(20px + 50px)}
+  body.has-tabbar .player{bottom:50px}
+}
+
+/* 社区帖子卡片 - 点击跳转视觉反馈 */
+.post-card{cursor:pointer;transition:background .15s, border-color .15s}
+.post-card:hover{background:var(--bg-3) !important;border-color:var(--border) !important}
+.post-card:active{transform:scale(0.995)}
+/* 帖子详情页 */
+.post-detail{max-width:720px;margin:0 auto}
+.post-detail-head{display:flex;gap:14px;align-items:flex-start;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--bg-3)}
+.post-detail-head .avatar{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:17px;flex-shrink:0}
+.post-detail-head .name{font-weight:700;font-size:15px;color:var(--text-1)}
+.post-detail-head .time{font-size:11.5px;color:var(--text-4);margin-top:3px}
+.post-detail-content{font-size:15px;line-height:1.8;color:var(--text-2);white-space:pre-wrap;word-break:break-word}
+.post-detail-back{display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:6px;background:rgba(255,255,255,0.05);color:var(--text-3);font-size:12px;font-weight:600;cursor:pointer;border:none;cursor:pointer}
+.post-detail-back:active{background:var(--bg-3)}
+
 /* 减少动画（尊重用户设置 + 省电） */
 @media (prefers-reduced-motion: reduce){
   *{animation-duration:0.01ms !important;animation-iteration-count:1 !important;transition-duration:0.01ms !important}
@@ -1547,7 +1600,21 @@ tr:hover td{background:rgba(255,255,255,0.02)}
 
   <!-- ============ MAIN ============ -->
   <main class="main" id="mainArea">
-    <div class="topbar">
+    <div class="topbar" style="position:relative">
+      <button class="menu-btn" id="mobileMenuBtn" title="菜单">☰</button>
+      <div class="mobile-nav-panel" id="mobileNavPanel">
+        <a data-mview="home"><span class="ico">🏠</span>首页发现</a>
+        <a data-mview="trending"><span class="ico">🔥</span>好评排行榜</a>
+        <a data-mview="newest"><span class="ico">🆕</span>最新入库</a>
+        <a data-mview="worst"><span class="ico">⚔️</span>争议歌曲榜</a>
+        <a data-mview="search-view"><span class="ico">🔍</span>搜索筛选</a>
+        <a data-mview="community"><span class="ico">🌐</span>社区讨论</a>
+        <div class="sep"></div>
+        <div class="nav-title">我的音乐库</div>
+        <a id="gotoLiked"><span class="ico">💚</span>我好评过的</a>
+        <a id="gotoCommented"><span class="ico">💬</span>我评论过的</a>
+        <a id="gotoRecent"><span class="ico">🎧</span>最近在听</a>
+      </div>
       <div class="nav-arrows">
         <button class="nav-arrow" title="后退">‹</button>
         <button class="nav-arrow" title="前进">›</button>
@@ -1586,6 +1653,14 @@ tr:hover td{background:rgba(255,255,255,0.02)}
       <!-- JS rendered -->
     </div>
   </main>
+
+  <!-- ============ 移动端底部Tab（微信风格） ============ -->
+  <nav class="mobile-tabbar" id="mobileTabbar">
+    <a class="tab active" data-mview="home"><span class="ico">🏠</span><span class="lbl">首页</span></a>
+    <a class="tab" data-mview="trending"><span class="ico">🔥</span><span class="lbl">排行</span></a>
+    <a class="tab" data-mview="community"><span class="ico">🌐</span><span class="lbl">社区</span><span class="dot" id="tabDot" style="display:none"></span></a>
+    <a class="tab" data-mview="profile"><span class="ico">👤</span><span class="lbl">我的</span></a>
+  </nav>
 
   <!-- ============ PLAYER ============ -->
   <div class="player" id="player">
@@ -2417,6 +2492,78 @@ const app = {
         }
       };
     });
+
+    // ========= 移动端：下拉菜单 + 底部Tab =========
+    // 检测移动端并添加 body class（用于内容底部间距适配）
+    const _checkMobile = () => {
+      if (window.innerWidth <= 1024) document.body.classList.add("has-tabbar");
+      else document.body.classList.remove("has-tabbar");
+    };
+    _checkMobile(); window.addEventListener("resize", _checkMobile);
+
+    // 顶栏下拉按钮
+    const _mobileMenuBtn = $("#mobileMenuBtn");
+    const _mobileNavPanel = $("#mobileNavPanel");
+    if (_mobileMenuBtn && _mobileNavPanel) {
+      _mobileMenuBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const isOpen = _mobileNavPanel.classList.toggle("open");
+      });
+      // 点击外部关闭
+      document.addEventListener("click", (e) => {
+        if (!_mobileNavPanel.contains(e.target) && e.target !== _mobileMenuBtn) {
+          _mobileNavPanel.classList.remove("open");
+        }
+      });
+    }
+
+    // 统一的视图切换函数（同步侧边栏/下拉/Tab的active状态）
+    const _switchMView = (v) => {
+      // 同步侧边栏 active
+      $$(".nav a[data-view]").forEach(x => x.classList.toggle("active", x.dataset.view === v));
+      // 同步下拉菜单 active
+      $$(".mobile-nav-panel a[data-mview]").forEach(x => x.classList.toggle("active", x.dataset.mview === v));
+      // 同步底部Tab active
+      $$(".mobile-tabbar .tab[data-mview]").forEach(x => x.classList.toggle("active", x.dataset.mview === v));
+      _mobileNavPanel && _mobileNavPanel.classList.remove("open");
+      this.view = v;
+      if (v === "search-view") { this.view = "home"; $("#searchInput") && $("#searchInput").focus(); }
+      if (v === "community") { this.renderCommunity(); return; }
+      if (v === "profile") { const u = Session.currentUser(); if(u) this.openProfile(); else { showToast("🔐 请先登录", 2200); this.openModal("loginModal"); } return; }
+      this.renderHome();
+    };
+    // 下拉面板导航项
+    $$(".mobile-nav-panel a[data-mview]").forEach(a => {
+      a.onclick = () => _switchMView(a.dataset.mview);
+    });
+    // 底部Tab导航项
+    $$(".mobile-tabbar .tab[data-mview]").forEach(t => {
+      t.onclick = (e) => { e.preventDefault(); _switchMView(t.dataset.mview); };
+    });
+    // 下拉面板 - 我的音乐库快捷项（复用侧边栏逻辑）
+    const _bindPlQuick = (id, kw, title, sub) => {
+      const el = $(id); if (!el) return;
+      el.onclick = () => {
+        _mobileNavPanel && _mobileNavPanel.classList.remove("open");
+        const sess = Session.currentUser();
+        if (!sess) { showToast("🔐 请先登录以查看你的音乐库", 2500); return; }
+        if (kw === "好评") {
+          const rs = Ratings.get(); const arr = [];
+          this.catalog.all().forEach(s => { const r = rs[s.audioUrl]; if (r && r.users[sess.name] === 1) arr.push(s); });
+          Player.setQueue(arr, 0); this.renderGrid(arr, title, sub + " 💚");
+        } else if (kw === "评论") {
+          const cs = Comments.get().filter(c => c.user.toLowerCase() === sess.name.toLowerCase());
+          const seen = new Set(); const arr = [];
+          cs.forEach(c => { if (!seen.has(c.audio)) { const s = this.catalog.byAudio(c.audio); if (s) { arr.push(s); seen.add(c.audio); } } });
+          Player.setQueue(arr, 0); this.renderGrid(arr, title, sub + " 💬");
+        } else if (kw === "听") {
+          Player.setQueue(Player.queue.slice(), Math.max(0, Player.idx));
+        }
+      };
+    };
+    _bindPlQuick("#gotoLiked", "好评", "我好评过的", "你给过好评的歌曲");
+    _bindPlQuick("#gotoCommented", "评论", "我评论过的", "你评论过的歌曲");
+    _bindPlQuick("#gotoRecent", "听", "最近在听", "当前播放队列");
   },
 
   refreshUser(){
@@ -3032,13 +3179,16 @@ const app = {
     try{
       const r=await fetch(`${API_BASE}/api/community/posts`);
       const data=await r.json();
-      if(!Array.isArray(data)||data.length===0){list.innerHTML='<div style="text-align:center;padding:40px;color:var(--text-4)">暂无帖子，快来发第一条吧！</div>';return}
-      list.innerHTML=data.map(p=>{
+      this._communityPosts = Array.isArray(data)?data:[];
+      if(!this._communityPosts.length){list.innerHTML='<div style="text-align:center;padding:40px;color:var(--text-4)">暂无帖子，快来发第一条吧！</div>';return}
+      const self=this;
+      list.innerHTML=this._communityPosts.map((p,idx)=>{
         const att=p.attachment_data?(p.attachment_type&&p.attachment_type.startsWith('image')?
-          `<img src="${p.attachment_data}" style="max-width:300px;max-height:200px;border-radius:8px;margin-top:8px;cursor:pointer" onclick="window.open(this.src)" />`:
-          `<a href="${p.attachment_data}" download="${p.attachment_name||'file'}" style="color:var(--accent);font-size:12px;display:inline-block;margin-top:6px">📎 ${p.attachment_name||'附件'}</a>`):'';
+          `<img src="${p.attachment_data}" style="max-width:300px;max-height:200px;border-radius:8px;margin-top:8px;cursor:pointer" onclick="event.stopPropagation();window.open(this.src)" />`:
+          `<a href="${p.attachment_data}" download="${p.attachment_name||'file'}" style="color:var(--accent);font-size:12px;display:inline-block;margin-top:6px" onclick="event.stopPropagation()">📎 ${p.attachment_name||'附件'}</a>`):'';
         const avatar=(p.username||'?').charAt(0).toUpperCase();
-        return `<div style="background:var(--bg-2);padding:16px;border-radius:12px;border:1px solid var(--bg-3)">
+        const textPreview = (p.content||'').replace(/</g,'&lt;');
+        return `<div class="post-card" data-pidx="${idx}" style="background:var(--bg-2);padding:16px;border-radius:12px;border:1px solid var(--bg-3)">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
             <div style="width:36px;height:36px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px">${avatar}</div>
             <div>
@@ -3046,11 +3196,43 @@ const app = {
               <div style="font-size:11px;color:var(--text-4)">${p.created_at}</div>
             </div>
           </div>
-          <div style="font-size:14px;color:var(--text-2);line-height:1.7;white-space:pre-wrap;word-break:break-word">${(p.content||'').replace(/</g,'&lt;')}</div>
+          <div style="font-size:14px;color:var(--text-2);line-height:1.7;white-space:pre-wrap;word-break:break-word">${textPreview}</div>
           ${att}
         </div>`;
       }).join('');
+      // 绑定帖子点击跳转
+      list.querySelectorAll(".post-card").forEach(card=>{
+        card.onclick = () => {
+          const i = parseInt(card.dataset.pidx,10);
+          if(!isNaN(i)) self.renderPostDetail(i);
+        };
+      });
     }catch(e){list.innerHTML='<div style="text-align:center;padding:40px;color:var(--text-4)">加载失败，请检查网络</div>'}
+  },
+  // 帖子详情页（点击跳转后的页面）
+  renderPostDetail(pidx){
+    const p = (this._communityPosts||[])[pidx];
+    if(!p){ showToast("❌ 帖子不存在", 2000); this.renderCommunity(); return; }
+    const att=p.attachment_data?(p.attachment_type&&p.attachment_type.startsWith('image')?
+      `<img src="${p.attachment_data}" style="max-width:100%;border-radius:10px;margin-top:16px" onclick="window.open(this.src)" />`:
+      `<a href="${p.attachment_data}" download="${p.attachment_name||'file'}" style="color:var(--accent);font-size:13px;display:inline-block;margin-top:14px">📎 下载附件：${p.attachment_name||'附件'}</a>`):'';
+    const avatar=(p.username||'?').charAt(0).toUpperCase();
+    const ca=$("#contentArea");
+    ca.innerHTML=`<div style="padding:20px 14px;max-width:720px;margin:0 auto">
+      <button class="post-detail-back" id="postBackBtn">← 返回社区</button>
+      <div class="post-detail" style="margin-top:18px">
+        <div class="post-detail-head">
+          <div class="avatar" style="background:var(--accent)">${avatar}</div>
+          <div>
+            <div class="name">${p.username}</div>
+            <div class="time">${p.created_at}</div>
+          </div>
+        </div>
+        <div class="post-detail-content">${(p.content||'').replace(/</g,'&lt;')}</div>
+        ${att}
+      </div>
+    </div>`;
+    $("#postBackBtn").onclick = ()=> this.renderCommunity();
   },
   async submitCommunityPost(){
     const u=Session.get(); if(!u){showToast("🔐 请先登录",2200);return}

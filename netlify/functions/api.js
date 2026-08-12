@@ -10,7 +10,22 @@ exports.handler = async (event, context) => {
   context.callbackWaitsForEmptyEventLoop = false;
 
   // 构建完整的 URL（含查询参数）
-  const path = event.path || '/';
+  // Netlify redirect 后路径可能是 /.netlify/functions/api 或 带 /api/xxx 后缀
+  // 需要规范化为 serverListener 期望的格式：/admin 或 /api/xxx 或 /admin/api/xxx
+  let path = event.path || '/';
+  const FN_PREFIX = '/.netlify/functions/api';
+  if (path.startsWith(FN_PREFIX)) {
+    let rest = path.slice(FN_PREFIX.length);
+    if (!rest.startsWith('/')) rest = '/' + rest;
+    // 如果 redirect 规则没有保留原路径，则 rest 会是 '/'，
+    // 此时尝试从 headers 中的 x-nf-request-path 获取原始请求路径
+    if (rest === '/' || rest === '') {
+      const origPath = (event.headers && (event.headers['x-nf-request-path'] || event.headers['X-Nf-Request-Path'])) || '';
+      if (origPath) rest = origPath;
+    }
+    path = rest || '/';
+  }
+  // 安全兜底：如果路径完全是空的 Function root，尝试原始 http 路径
   const query = event.queryStringParameters || {};
   const queryString = Object.keys(query)
     .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(query[k])}`)
