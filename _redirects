@@ -1,0 +1,6 @@
+# Netlify 重写规则：将 /api/* 和 /admin* 全部交给 Functions/api 处理
+/api/*          /.netlify/functions/api/:splat      200
+/admin*         /.netlify/functions/api              200
+
+# SPA fallback：其他请求交给 index.html
+/*              /index.html                          200
