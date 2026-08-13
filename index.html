@@ -59,12 +59,12 @@
   --shadow-lg:0 30px 60px -20px rgba(0,0,0,0.8),0 10px 30px -10px rgba(0,0,0,0.6);
   --shadow-md:0 10px 25px -8px rgba(0,0,0,0.6);
 
-  /* 圆角节奏 */
-  --r-xs:4px;
-  --r-sm:7px;
-  --r-md:12px;
-  --r-lg:18px;
-  --r-xl:24px;
+  /* 圆角节奏 - 棱角分明，柔中带刚 */
+  --r-xs:3px;
+  --r-sm:5px;
+  --r-md:8px;
+  --r-lg:12px;
+  --r-xl:16px;
 
   --ease:cubic-bezier(0.22,1,0.36,1);
   --ease-snap:cubic-bezier(0.4,0,0.2,1);
@@ -128,22 +128,14 @@ img{display:block;max-width:100%;-webkit-user-drag:none}
   position:relative;
 }
 .brand-logo{
-  width:38px;height:38px;
-  border-radius:10px;
-  background:linear-gradient(145deg, #22c55e 0%, #15803d 100%);
+  width:36px;height:36px;
+  border-radius:8px;
+  background:#22c55e;
   display:flex;align-items:center;justify-content:center;
-  font-weight:900;font-size:16px;color:#000;
-  box-shadow:0 4px 14px rgba(34,197,94,0.35), inset 0 1px 0 rgba(255,255,255,0.2);
+  font-weight:900;font-size:15px;color:#000;
   position:relative;
   overflow:hidden;
 }
-.brand-logo::after{
-  content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;
-  background:linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.18) 50%, transparent 70%);
-  transform:translateX(-100%) rotate(25deg);
-  animation:sheen 6s var(--ease) infinite;
-}
-@keyframes sheen{0%,60%{transform:translateX(-100%) rotate(25deg)}70%,100%{transform:translateX(100%) rotate(25deg)}}
 .brand-name{
   font-weight:800;
   font-size:16.5px;
@@ -190,9 +182,8 @@ img{display:block;max-width:100%;-webkit-user-drag:none}
 .nav a.active::before{
   content:'';position:absolute;
   left:-6px;top:50%;transform:translateY(-50%);
-  width:3px;height:20px;border-radius:0 3px 3px 0;
+  width:3px;height:18px;border-radius:0 2px 2px 0;
   background:var(--accent);
-  box-shadow:0 0 10px rgba(34,197,94,0.5);
 }
 .nav .ico{width:20px;display:inline-flex;justify-content:center;font-size:15px;opacity:.95}
 
@@ -271,13 +262,13 @@ img{display:block;max-width:100%;-webkit-user-drag:none}
 .search{flex:1;max-width:440px;position:relative}
 .search input{
   width:100%;
-  height:40px;
+  height:38px;
   background:var(--bg-card);
   border:1px solid var(--border);
-  border-radius:12px;
-  padding:0 16px 0 42px;
+  border-radius:8px;
+  padding:0 14px 0 38px;
   color:var(--text);
-  font-size:13.5px;
+  font-size:13px;
   font-weight:500;
   transition:all .18s var(--ease);
 }
@@ -288,9 +279,20 @@ img{display:block;max-width:100%;-webkit-user-drag:none}
   box-shadow:0 0 0 3px rgba(34,197,94,0.08);
 }
 .search::before{
-  content:'🔍';
-  position:absolute;left:14px;top:50%;transform:translateY(-48%);
-  font-size:13px;opacity:.65;filter:grayscale(0.3);
+  content:'';
+  position:absolute;left:12px;top:50%;
+  width:14px;height:14px;
+  border:2px solid var(--text-4);
+  border-radius:50%;
+  transform:translateY(-50%);
+}
+.search::after{
+  content:'';
+  position:absolute;left:23px;top:50%;
+  width:6px;height:2px;
+  background:var(--text-4);
+  transform:translateY(2px) rotate(45deg);
+  border-radius:1px;
 }
 
 .topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
@@ -303,27 +305,26 @@ img{display:block;max-width:100%;-webkit-user-drag:none}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
 .btn{
-  padding:0 16px;
-  height:34px;
-  border-radius:10px;
+  padding:0 14px;
+  height:32px;
+  border-radius:6px;
   font-weight:700;
   font-size:12.5px;
-  display:inline-flex;align-items:center;gap:7px;
-  transition:all .18s var(--ease);
+  display:inline-flex;align-items:center;gap:6px;
+  transition:all .15s var(--ease);
   cursor:pointer;
   letter-spacing:0.1px;
 }
 .btn-ghost{color:var(--text-3);border:1px solid transparent}
 .btn-ghost:hover{color:var(--text);background:var(--bg-card);border-color:var(--border)}
-.btn-light{background:#fff;color:#0b0b0d;box-shadow:0 2px 8px rgba(255,255,255,0.08)}
-.btn-light:hover{transform:translateY(-1px);background:#fafafa;box-shadow:0 4px 14px rgba(255,255,255,0.12)}
+.btn-light{background:#fff;color:#0b0b0d}
+.btn-light:hover{background:#fafafa}
 .btn-accent{
-  background:linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+  background:#22c55e;
   color:#052e16;
-  box-shadow:0 2px 10px rgba(34,197,94,0.25), inset 0 1px 0 rgba(255,255,255,0.2);
 }
-.btn-accent:hover{transform:translateY(-1px);box-shadow:0 4px 18px rgba(34,197,94,0.35)}
-.btn-sm{height:30px;padding:0 12px;font-size:12px;border-radius:9px}
+.btn-accent:hover{background:#20b854}
+.btn-sm{height:28px;padding:0 10px;font-size:12px;border-radius:5px}
 
 .update-indicator{
   display:inline-flex;align-items:center;gap:7px;
@@ -350,17 +351,17 @@ img{display:block;max-width:100%;-webkit-user-drag:none}
 
 .userchip{
   display:flex;align-items:center;gap:9px;
-  height:34px;padding-right:12px;padding-left:4px;
+  height:32px;padding-right:12px;padding-left:4px;
   background:var(--bg-card);
-  border-radius:999px;
+  border-radius:6px;
   cursor:pointer;
-  transition:all .18s var(--ease);
+  transition:all .15s var(--ease);
   border:1px solid var(--border);
 }
 .userchip:hover{background:var(--bg-card-hover);border-color:var(--border-2)}
 .avatar{
   width:26px;height:26px;border-radius:50%;
-  background:linear-gradient(145deg,#22c55e,#15803d);
+  background:#22c55e;
   color:#052e16;
   display:inline-flex;align-items:center;justify-content:center;
   font-weight:800;font-size:12px;
@@ -390,10 +391,7 @@ img{display:block;max-width:100%;-webkit-user-drag:none}
   letter-spacing:-0.5px;
   margin-bottom:8px;
   line-height:1.15;
-  background:linear-gradient(180deg, #fff 0%, #d4d4d8 100%);
-  -webkit-background-clip:text;
-  background-clip:text;
-  -webkit-text-fill-color:transparent;
+  color:#fff;
 }
 .hero p{color:var(--text-3);font-size:13.5px;font-weight:500}
 .hero-stats{display:flex;gap:12px;flex-wrap:wrap}
@@ -417,8 +415,7 @@ img{display:block;max-width:100%;-webkit-user-drag:none}
 .stat b{
   font-size:20px;font-weight:800;
   display:block;
-  background:linear-gradient(180deg,#fff,#a1a1aa);
-  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  color:#fff;
   letter-spacing:-0.3px;
 }
 .stat span{font-size:10.5px;color:var(--text-4);font-weight:700;letter-spacing:0.8px;text-transform:uppercase;margin-top:2px;display:block}
@@ -430,8 +427,8 @@ img{display:block;max-width:100%;-webkit-user-drag:none}
   flex-wrap:wrap;
 }
 .chip{
-  padding:7px 14px;
-  border-radius:999px;
+  padding:6px 12px;
+  border-radius:5px;
   background:var(--bg-card);
   color:var(--text-3);
   font-size:12px;
@@ -446,7 +443,6 @@ img{display:block;max-width:100%;-webkit-user-drag:none}
   background:var(--text);
   color:#0b0b0d;
   border-color:var(--text);
-  box-shadow:0 2px 10px rgba(255,255,255,0.08);
 }
 .select-wrap{
   margin-left:auto;
@@ -495,18 +491,17 @@ img{display:block;max-width:100%;-webkit-user-drag:none}
 .card .cover{
   position:relative;
   aspect-ratio:1/1;
-  border-radius:10px;
+  border-radius:6px;
   overflow:hidden;
-  margin-bottom:14px;
-  box-shadow:0 10px 30px -4px rgba(0,0,0,0.6);
+  margin-bottom:12px;
+  box-shadow:0 8px 24px -6px rgba(0,0,0,0.6);
   background:linear-gradient(135deg,#1f1f25,#121216);
 }
-/* 封面图片加载失败时显示的渐变背景，不是字母 */
 .card .cover img{
   width:100%;height:100%;object-fit:cover;
-  transition:transform .45s var(--ease), filter .3s var(--ease);
+  transition:transform .35s var(--ease);
 }
-.card:hover .cover img{transform:scale(1.06);filter:saturate(1.1) brightness(1.05)}
+.card:hover .cover img{transform:scale(1.03)}
 .card .cover::after{
   content:'';position:absolute;inset:0;
   background:
@@ -518,19 +513,19 @@ img{display:block;max-width:100%;-webkit-user-drag:none}
 
 /* 播放按钮 - 更柔和，不是硬弹出来 */
 .play-btn{
-  position:absolute;right:12px;bottom:12px;
-  width:44px;height:44px;border-radius:50%;
-  background:linear-gradient(145deg,#22c55e,#16a34a);
+  position:absolute;right:10px;bottom:10px;
+  width:40px;height:40px;border-radius:50%;
+  background:#22c55e;
   color:#052e16;
   display:flex;align-items:center;justify-content:center;
-  font-size:15px;padding-left:2px;
-  box-shadow:0 8px 22px -2px rgba(34,197,94,0.5), inset 0 1px 0 rgba(255,255,255,0.25);
-  transform:translateY(8px) scale(0.92);
+  font-size:14px;padding-left:2px;
+  box-shadow:0 6px 18px -2px rgba(0,0,0,0.5);
+  transform:translateY(6px) scale(0.9);
   opacity:0;
-  transition:all .28s var(--ease);
+  transition:all .25s var(--ease);
   z-index:2;
 }
-.play-btn:hover{transform:translateY(8px) scale(1);background:linear-gradient(145deg,#2ac766,#18b052)}
+.play-btn:hover{background:#20b854}
 .card:hover .play-btn{transform:translateY(0) scale(1);opacity:1}
 
 .card .t{
@@ -555,8 +550,8 @@ img{display:block;max-width:100%;-webkit-user-drag:none}
   margin-top:8px;
   font-size:10px;
   font-weight:700;
-  padding:3px 8px;
-  border-radius:999px;
+  padding:3px 7px;
+  border-radius:3px;
   background:rgba(255,255,255,0.04);
   color:var(--text-4);
   letter-spacing:0.4px;
@@ -634,10 +629,9 @@ img{display:block;max-width:100%;-webkit-user-drag:none}
   background:#fff;color:#0b0b0d;
   display:inline-flex;align-items:center;justify-content:center;
   font-size:13px;padding-left:1.5px;
-  box-shadow:0 3px 12px rgba(255,255,255,0.1);
   transition:all .15s var(--ease);
 }
-.p-btns .play:hover{transform:scale(1.06);color:#0b0b0d;background:#f5f5f5}
+.p-btns .play:hover{color:#0b0b0d;background:#f5f5f5}
 
 .p-prog{display:flex;align-items:center;gap:10px;width:100%}
 .p-prog span{
@@ -819,8 +813,7 @@ img{display:block;max-width:100%;-webkit-user-drag:none}
   font-weight:800;
   letter-spacing:-0.8px;
   line-height:1.1;
-  background:linear-gradient(180deg,#fff,#c9c9d0);
-  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  color:#fff;
 }
 .song-info .art{font-size:15px;color:var(--text-3);font-weight:500}
 .song-info .meta-row{
@@ -839,16 +832,15 @@ img{display:block;max-width:100%;-webkit-user-drag:none}
 }
 .song-actions{display:flex;gap:10px;margin-top:18px;align-items:center;flex-wrap:wrap}
 .round-play{
-  width:54px;height:54px;
+  width:52px;height:52px;
   border-radius:50%;
-  background:linear-gradient(145deg,#22c55e,#16a34a);
+  background:#22c55e;
   color:#052e16;
   display:inline-flex;align-items:center;justify-content:center;
-  font-size:19px;padding-left:3px;
-  transition:all .2s var(--ease);
-  box-shadow:0 10px 28px -4px rgba(34,197,94,0.55), inset 0 1px 0 rgba(255,255,255,0.25);
+  font-size:18px;padding-left:3px;
+  transition:background .2s var(--ease);
 }
-.round-play:hover{transform:scale(1.06)}
+.round-play:hover{background:#20b854}
 .ghost-btn{
   height:40px;padding:0 16px;
   border-radius:10px;
@@ -979,8 +971,7 @@ img{display:block;max-width:100%;-webkit-user-drag:none}
 .form h3{
   font-size:23px;font-weight:800;text-align:center;
   margin-bottom:4px;letter-spacing:-0.4px;
-  background:linear-gradient(180deg,#fff,#c9c9d0);
-  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+  color:#fff;
 }
 .form .sub{text-align:center;color:var(--text-4);font-size:13px;margin-bottom:10px;margin-top:-10px}
 .field label{
@@ -1586,23 +1577,22 @@ body.has-tabbar .player{bottom:54px}
       </div>
     </div>
     <nav class="nav">
-      <a class="active" data-view="home"><span class="ico">🏠</span>首页发现</a>
-      <a data-view="trending"><span class="ico">🔥</span>好评排行榜</a>
-      <a data-view="newest"><span class="ico">🆕</span>最新入库</a>
-      <a data-view="worst"><span class="ico">⚔️</span>争议歌曲榜</a>
-      <a data-view="search-view"><span class="ico">🔍</span>搜索筛选</a>
-      <a data-view="community"><span class="ico">🌐</span>社区讨论</a>
+      <a class="active" data-view="home"><span class="ico">●</span>首页发现</a>
+      <a data-view="trending"><span class="ico">▲</span>好评排行榜</a>
+      <a data-view="newest"><span class="ico">+</span>最新入库</a>
+      <a data-view="worst"><span class="ico">▼</span>争议歌曲榜</a>
+      <a data-view="search-view"><span class="ico">○</span>搜索筛选</a>
+      <a data-view="community"><span class="ico">◆</span>社区讨论</a>
     </nav>
     <div class="nav-sep"></div>
     <div class="nav-title">我的音乐库</div>
     <div class="playlist" id="userPlaylists">
-      <div class="pl-item">💚 我好评过的</div>
-      <div class="pl-item">💬 我评论过的</div>
-      <div class="pl-item">🎧 最近在听</div>
+      <div class="pl-item">我好评过的</div>
+      <div class="pl-item">我评论过的</div>
+      <div class="pl-item">最近在听</div>
     </div>
     <div class="sidebar-footer">
-      数据：<b>NCS.io</b> 官方公开API · 自动同步<br>
-      评分算法：<b>Wilson Score</b> 置信下界<br>
+      数据源：<b>NCS.io</b> · 自动同步<br>
       © NCS Ratings 社区版
     </div>
   </aside>
@@ -1612,17 +1602,17 @@ body.has-tabbar .player{bottom:54px}
     <div class="topbar" style="position:relative">
       <button class="menu-btn" id="mobileMenuBtn" title="菜单">☰</button>
       <div class="mobile-nav-panel" id="mobileNavPanel">
-        <a data-mview="home"><span class="ico">🏠</span>首页发现</a>
-        <a data-mview="trending"><span class="ico">🔥</span>好评排行榜</a>
-        <a data-mview="newest"><span class="ico">🆕</span>最新入库</a>
-        <a data-mview="worst"><span class="ico">⚔️</span>争议歌曲榜</a>
-        <a data-mview="search-view"><span class="ico">🔍</span>搜索筛选</a>
-        <a data-mview="community"><span class="ico">🌐</span>社区讨论</a>
+        <a data-mview="home"><span class="ico">●</span>首页发现</a>
+        <a data-mview="trending"><span class="ico">▲</span>好评排行榜</a>
+        <a data-mview="newest"><span class="ico">+</span>最新入库</a>
+        <a data-mview="worst"><span class="ico">▼</span>争议歌曲榜</a>
+        <a data-mview="search-view"><span class="ico">○</span>搜索筛选</a>
+        <a data-mview="community"><span class="ico">◆</span>社区讨论</a>
         <div class="sep"></div>
         <div class="nav-title">我的音乐库</div>
-        <a id="gotoLiked"><span class="ico">💚</span>我好评过的</a>
-        <a id="gotoCommented"><span class="ico">💬</span>我评论过的</a>
-        <a id="gotoRecent"><span class="ico">🎧</span>最近在听</a>
+        <a id="gotoLiked"><span class="ico">▲</span>我好评过的</a>
+        <a id="gotoCommented"><span class="ico">◆</span>我评论过的</a>
+        <a id="gotoRecent"><span class="ico">●</span>最近在听</a>
       </div>
       <div class="nav-arrows">
         <button class="nav-arrow" title="后退">‹</button>
@@ -1638,21 +1628,21 @@ body.has-tabbar .player{bottom:54px}
         <span class="update-indicator ok" id="updateStatus" title="上次同步时间">
           <span class="dot"></span><span id="syncText">准备中...</span>
         </span>
-        <button class="btn btn-sm btn-ghost" id="btnCheckUpdate">🔄 <span>检查更新</span></button>
-        <button class="btn btn-sm btn-light" id="btnPublish">📊 <span>数据总览</span></button>
+        <button class="btn btn-sm btn-ghost" id="btnCheckUpdate">检查更新</button>
+        <button class="btn btn-sm btn-light" id="btnPublish">数据总览</button>
         <div style="position:relative">
           <div class="userchip" id="userChip">
             <div class="avatar" id="topAvatar">?</div>
             <span class="username" id="topUsername">未登录</span>
           </div>
           <div class="dropdown" id="userMenu">
-            <a id="gotoProfile">👤 个人设置</a>
-            <a id="gotoFeedback">📮 反馈建议</a>
-            <a id="gotoAdmin">📈 后台管理</a>
+            <a id="gotoProfile">个人设置</a>
+            <a id="gotoFeedback">反馈建议</a>
+            <a id="gotoAdmin">后台管理</a>
             <div class="sep"></div>
-            <a id="btnLogin">🔐 登录账号</a>
-            <a id="btnRegister">✨ 立即注册</a>
-            <a id="btnLogout">🚪 退出登录</a>
+            <a id="btnLogin">登录</a>
+            <a id="btnRegister">注册</a>
+            <a id="btnLogout">退出</a>
           </div>
         </div>
       </div>
@@ -1665,10 +1655,10 @@ body.has-tabbar .player{bottom:54px}
 
   <!-- ============ 移动端底部Tab（微信风格） ============ -->
   <nav class="mobile-tabbar" id="mobileTabbar">
-    <a class="tab active" data-mview="home"><span class="ico">🏠</span><span class="lbl">首页</span></a>
-    <a class="tab" data-mview="trending"><span class="ico">🔥</span><span class="lbl">排行</span></a>
-    <a class="tab" data-mview="community"><span class="ico">🌐</span><span class="lbl">社区</span><span class="dot" id="tabDot" style="display:none"></span></a>
-    <a class="tab" data-mview="profile"><span class="ico">👤</span><span class="lbl">我的</span></a>
+    <a class="tab active" data-mview="home"><span class="ico">●</span><span class="lbl">首页</span></a>
+    <a class="tab" data-mview="trending"><span class="ico">▲</span><span class="lbl">排行</span></a>
+    <a class="tab" data-mview="community"><span class="ico">◆</span><span class="lbl">社区</span><span class="dot" id="tabDot" style="display:none"></span></a>
+    <a class="tab" data-mview="profile"><span class="ico">○</span><span class="lbl">我的</span></a>
   </nav>
 
   <!-- ============ PLAYER ============ -->
@@ -1698,7 +1688,7 @@ body.has-tabbar .player{bottom:54px}
       </div>
     </div>
     <div class="p-extra">
-      <button class="ico" id="pCmtBtn" title="查看此歌曲详情与评论">💬</button>
+      <button class="ico" id="pCmtBtn" title="详情">💬</button>
       <div class="vol">
         <button class="ico" id="pMute">🔊</button>
         <div class="bar" id="pVolBar">
@@ -1716,7 +1706,7 @@ body.has-tabbar .player{bottom:54px}
 <div class="overlay" id="songModal">
   <div class="modal">
     <div class="modal-head">
-      <h2>🎵 歌曲详情</h2>
+      <h2>歌曲详情</h2>
       <button class="modal-close" data-close="songModal">✕</button>
     </div>
     <div class="modal-body" id="songModalBody"></div>
@@ -1727,16 +1717,16 @@ body.has-tabbar .player{bottom:54px}
 <div class="overlay" id="loginModal">
   <div class="modal" style="max-width:440px">
     <div class="modal-head">
-      <h2>🔐 登录账号</h2>
+      <h2>登录</h2>
       <button class="modal-close" data-close="loginModal">✕</button>
     </div>
     <div class="modal-body">
       <form class="form" id="loginForm" onsubmit="event.preventDefault();app.login();">
-        <h3>欢迎回来 👋</h3>
-        <p class="sub">输入邮箱接收验证码登录</p>
-        <div class="field"><label>📧 邮箱</label><input id="loginEmail" type="email" required maxlength="60" placeholder="输入注册邮箱" autocomplete="email"></div>
+        <h3>欢迎回来</h3>
+        <p class="sub">输入邮箱接收验证码</p>
+        <div class="field"><label>邮箱</label><input id="loginEmail" type="email" required maxlength="60" placeholder="输入注册邮箱" autocomplete="email"></div>
         <div class="field">
-          <label>🔑 验证码</label>
+          <label>验证码</label>
           <div style="display:flex;gap:8px;align-items:center">
             <input id="loginCode" required maxlength="6" placeholder="6位验证码" style="flex:1;letter-spacing:2px" autocomplete="one-time-code">
             <button type="button" id="btnSendLoginCode" class="btn" style="height:42px;padding:0 16px;border-radius:8px;background:var(--accent);color:#fff;font-weight:700;font-size:13px;flex-shrink:0;cursor:pointer;border:none">发送验证码</button>
@@ -1755,23 +1745,19 @@ body.has-tabbar .player{bottom:54px}
 <div class="overlay" id="registerModal">
   <div class="modal" style="max-width:440px">
     <div class="modal-head">
-      <h2>✨ 加入评分社区</h2>
+      <h2>注册</h2>
       <button class="modal-close" data-close="registerModal">✕</button>
     </div>
     <div class="modal-body">
       <form class="form" id="regForm" onsubmit="event.preventDefault();app.register();">
-        <h3>创建你的账号 🎧</h3>
-        <p class="sub">加入社区，对 NCS 歌曲进行评分评论</p>
-        <div class="field"><label>👤 用户名</label><input id="regUser" required minlength="2" maxlength="20" placeholder="2-20 个字符"></div>
-        <div class="field"><label>📧 邮箱</label><input id="regEmail" type="email" required maxlength="60" placeholder="输入邮箱接收验证码" autocomplete="email"></div>
+        <h3>创建账号</h3>
+        <div class="field"><label>用户名</label><input id="regUser" required minlength="2" maxlength="20" placeholder="2-20 个字符"></div>
+        <div class="field"><label>邮箱</label><input id="regEmail" type="email" required maxlength="60" placeholder="输入邮箱接收验证码" autocomplete="email"></div>
         <div class="field">
-          <label>🔑 验证码</label>
+          <label>验证码</label>
           <div style="display:flex;gap:8px;align-items:center">
             <input id="regCode" required maxlength="6" placeholder="6位验证码" style="flex:1;letter-spacing:2px" autocomplete="one-time-code">
             <button type="button" id="btnSendRegCode" class="btn" style="height:42px;padding:0 16px;border-radius:8px;background:var(--accent);color:#fff;font-weight:700;font-size:13px;flex-shrink:0;cursor:pointer;border:none">发送验证码</button>
-          </div>
-          <div style="margin-top:6px;font-size:11px;color:var(--text-4);line-height:1.6">
-            💡 验证码将发送到你的邮箱，5分钟内有效
           </div>
         </div>
         <button type="submit" class="btn btn-accent" style="justify-content:center;height:44px;font-size:14px;border-radius:12px">创建账号</button>
@@ -2463,7 +2449,7 @@ const app = {
         if(mergedC) Comments.set(localC);
         // 5. Re-render home to show merged data (after idle, not during first paint)
         if(mergedR || mergedC) this.renderHome();
-        showToast("✅ 数据库同步完成", 1800);
+        showToast("数据库同步完成", 1800);
       })();
     }, {timeout: 3000});
   },
@@ -2533,7 +2519,7 @@ const app = {
       el.onclick = ()=> {
         const t = el.textContent.trim();
         const sess = Session.currentUser();
-        if(!sess){ showToast("🔐 请先登录以查看你的音乐库", 2500); return; }
+        if(!sess){ showToast("请先登录以查看你的音乐库", 2500); return; }
         if(t.includes("好评")){
           const rs = Ratings.get(); const arr = [];
           this.catalog.all().forEach(s=>{ const r = rs[s.audioUrl]; if(r && r.users[sess.name] === 1) arr.push(s); });
@@ -2585,7 +2571,7 @@ const app = {
       this.view = v;
       if (v === "search-view") { this.view = "home"; $("#searchInput") && $("#searchInput").focus(); }
       if (v === "community") { this.renderCommunity(); return; }
-      if (v === "profile") { const u = Session.currentUser(); if(u) this.openProfile(); else { showToast("🔐 请先登录", 2200); this.openModal("loginModal"); } return; }
+      if (v === "profile") { const u = Session.currentUser(); if(u) this.openProfile(); else { showToast("请先登录", 2200); this.openModal("loginModal"); } return; }
       this.renderHome();
     };
     // 下拉面板导航项
@@ -2602,7 +2588,7 @@ const app = {
       el.onclick = () => {
         _mobileNavPanel && _mobileNavPanel.classList.remove("open");
         const sess = Session.currentUser();
-        if (!sess) { showToast("🔐 请先登录以查看你的音乐库", 2500); return; }
+        if (!sess) { showToast("请先登录以查看你的音乐库", 2500); return; }
         if (kw === "好评") {
           const rs = Ratings.get(); const arr = [];
           this.catalog.all().forEach(s => { const r = rs[s.audioUrl]; if (r && r.users[sess.name] === 1) arr.push(s); });
@@ -2876,10 +2862,10 @@ const app = {
           <h2>${esc(s.title)}</h2>
           <div class="art">${esc(s.artists||"Unknown Artist")}</div>
           <div class="meta-row">
-            <span>📊 ${r.total} 次投票</span>
-            <span>👍 ${r.likes} 好评</span>
-            <span>👎 ${r.dislikes} 差评</span>
-            <span>💬 ${cs.length} 条评论</span>
+            <span>${r.total} 次投票</span>
+            <span>${r.likes} 好评</span>
+            <span>${r.dislikes} 差评</span>
+            <span>${cs.length} 评论</span>
           </div>
           ${s.audioUrl ? `
             <!-- Full scrubbable timeline: drag the circle handle anywhere you want (e.g. 50% -> drop) -->
@@ -2889,7 +2875,7 @@ const app = {
                   ${showCur && !Player.audio.paused ? "⏸" : "▶"}
                 </button>
                 <div class="prog-detail-text">
-                  <div class="prog-detail-hint">拖动滑块到任意位置（如 50% = 歌曲高潮）</div>
+                  <div class="prog-detail-hint">拖动定位</div>
                 </div>
               </div>
               <div class="prog-detail-row">
@@ -2903,19 +2889,18 @@ const app = {
             </div>` : ''}
           <div class="song-actions">
             ${s.audioUrl ? '' : `<button class="round-play" id="detailPlay" disabled title="暂无音频" style="opacity:.4">▶</button>`}
-            ${s.audioUrl ? `<button class="ghost-btn" onclick="window.open('${esc(s.audioUrl)}','_blank')">⬇️ 下载音频 (MP3)</button>` : ''}
+            ${s.audioUrl ? `<button class="ghost-btn" onclick="window.open('${esc(s.audioUrl)}','_blank')">下载 MP3</button>` : ''}
             <div class="vote-btns">
-              <button class="vote-btn like ${my===1?'on':''}" data-v="1">👍 好评</button>
-              <button class="vote-btn dislike ${my===-1?'on':''}" data-v="-1">👎 差评</button>
+              <button class="vote-btn like ${my===1?'on':''}" data-v="1">好评</button>
+              <button class="vote-btn dislike ${my===-1?'on':''}" data-v="-1">差评</button>
             </div>
           </div>
         </div>
       </div>
-      <div class="tabs"><div class="tab active">📊 评分数据</div><div class="tab">💬 评论区 ${cs.length?"("+cs.length+")":""}</div></div>
+      <div class="tabs"><div class="tab active">评分数据</div><div class="tab">评论 ${cs.length?"("+cs.length+")":""}</div></div>
       <div class="tab-body">
         <div class="wilson-tip">
-          <b>关于评分算法：</b> 显示的 <b>${fmtRate(ws)}</b> 好评率使用 <b>Wilson Score 置信区间下界</b> (z=1.96, 95% CI)。<br>
-          因此 1 好评 / 0 差评 ≈ 75%（而非 100%），避免「一首评价刷高分」；投票数越多，置信度越高，结果越接近真实比率。
+          <b>Wilson Score</b> 置信下界 (z=1.96) — 投票越多，结果越接近真实比率。
         </div>
         <div class="rbar"><div class="lbl">好评率</div><div class="track"><div style="width:${likePct}%;background:linear-gradient(90deg,#16a34a,#22c55e)"></div></div><div class="val">${likePct}% · ${r.likes}</div></div>
         <div class="rbar"><div class="lbl">差评率</div><div class="track"><div style="width:${dislikePct}%;background:linear-gradient(90deg,#dc2626,#ef4444)"></div></div><div class="val">${dislikePct}% · ${r.dislikes}</div></div>
@@ -2930,7 +2915,7 @@ const app = {
     tabs[1].onclick = ()=>{ tabs[0].classList.remove("active"); tabs[1].classList.add("active"); };
     body.querySelectorAll(".vote-btn").forEach(b=>{
       b.onclick = ()=> {
-        if(!u){ showToast("🔐 请先登录再投票",2200); this.openModal("loginModal"); return; }
+        if(!u){ showToast("请先登录再投票",2200); this.openModal("loginModal"); return; }
         const v = parseInt(b.dataset.v,10);
         const res = Ratings.vote(s.audioUrl, u.name, b.classList.contains("on") ? 0 : v);
         if(res.changed){ this.openSong(s); this.renderHome(); Player.setQueue(Player.queue, Player.idx); }
@@ -3009,7 +2994,7 @@ const app = {
     Player.syncPlayBtns();
     const f = $("#commentForm"); if(f) f.onsubmit = (ev)=>{
       ev.preventDefault();
-      if(!u){ showToast("🔐 请先登录再评论",2200); this.openModal("loginModal"); return; }
+      if(!u){ showToast("请先登录再评论",2200); this.openModal("loginModal"); return; }
       const t = $("#commentText").value.trim(); if(!t) return;
       const rb = body.querySelectorAll(".vote-btn");
       const cv = rb[0] && rb[0].classList.contains("on") ? 1 : (rb[1] && rb[1].classList.contains("on") ? -1 : 0);
@@ -3027,21 +3012,21 @@ const app = {
         if(um.avatar.startsWith("data:")) av = `<img src="${um.avatar}" style="width:100%;height:100%;object-fit:cover">`;
         else av = um.avatar;
       }
-      const vBadge = c.choice===1?'<span class="vb like">👍 好评</span>':(c.choice===-1?'<span class="vb dislike">👎 差评</span>':"");
+      const vBadge = c.choice===1?'<span class="vb like">好评</span>':(c.choice===-1?'<span class="vb dislike">差评</span>':"");
       return `<div class="cmt"><div class="av">${av}</div><div class="cmt-body">
         <div class="cmt-head"><span class="u">${esc(c.user)}</span><span class="t">${this.fmtAgo(c.at)}</span>${vBadge}</div>
         <div class="cmt-text">${esc(c.text).replace(/\n/g,"<br>")}</div></div></div>`;
     }).join("");
     const form = !u ? `<div class="cmt-box" style="text-align:center;color:var(--text-4);font-size:13px">
-      🔐 请先 <a href="#" onclick="app.openModal('loginModal');return false;" style="color:var(--accent);font-weight:700">登录</a> 后再评论</div>` :
+      请先 <a href="#" onclick="app.openModal('loginModal');return false;" style="color:var(--accent);font-weight:700">登录</a> 后评论</div>` :
       `<form class="cmt-box" id="commentForm" onsubmit="return false">
-        <textarea id="commentText" maxlength="800" placeholder="写下你对这首歌的看法... （支持换行）"></textarea>
+        <textarea id="commentText" maxlength="800" placeholder="写下你的看法..."></textarea>
         <div class="row">
-          <span style="color:var(--text-4);font-size:12px">💡 可以先点上方 👍 或 👎，投票标签会显示在你的用户名旁</span>
-          <button type="submit" class="btn btn-sm btn-accent" style="border-radius:9px">💬 发布评论</button>
+          <span></span>
+          <button type="submit" class="btn btn-sm btn-accent" style="border-radius:6px">发布</button>
         </div>
       </form>`;
-    return `<div class="cmt-list">${items || '<div class="empty" style="padding:24px 10px"><div class="big">💬</div><h3>还没有评论</h3><p>成为第一个评论的人吧 ✨</p></div>'}</div>${form}`;
+    return `<div class="cmt-list">${items || '<div class="empty" style="padding:24px 10px"><h3 style="color:var(--text-4)">还没有评论</h3></div>'}</div>${form}`;
   },
 
   // ========== AUTH ==========
@@ -3049,10 +3034,10 @@ const app = {
   closeModal(id){ $("#"+id).classList.remove("open"); },
   async login(){
     const email=$("#loginEmail").value.trim(), code=$("#loginCode").value.trim();
-    if(!email){ showToast("❌ 请输入邮箱",2200); return; }
-    if(!code){ showToast("❌ 请输入验证码",2200); return; }
-    if(!this._loginCodeToken){ showToast("❌ 请先获取验证码",2200); return; }
-    showToast("⏳ 正在验证...",1200);
+    if(!email){ showToast("请输入邮箱",2200); return; }
+    if(!code){ showToast("请输入验证码",2200); return; }
+    if(!this._loginCodeToken){ showToast("请先获取验证码",2200); return; }
+    showToast("正在验证...",1200);
     const apiRes = await API.login(email, this._loginCodeToken, code);
     if(apiRes && apiRes.success){
       const u = apiRes.user.name;
@@ -3062,19 +3047,19 @@ const app = {
       if(!all[u.toLowerCase()]){ all[u.toLowerCase()] = user; Users.set(all); }
       Session.set(user); this.refreshUser(); this.closeModal("loginModal");
       $("#loginCode").value=""; this._loginCodeToken=null;
-      showToast("👋 欢迎回来，"+esc(user.name)+"！", 2200); this.renderHome();
+      showToast("已登录，"+esc(user.name), 2200); this.renderHome();
     } else {
       const msg = apiRes && apiRes.error ? apiRes.error : "登录失败";
-      showToast("❌ "+msg, 2500);
+      showToast(msg, 2500);
     }
   },
   async register(){
     const u=$("#regUser").value.trim(), email=$("#regEmail").value.trim(), code=$("#regCode").value.trim();
-    if(u.length < 2){ showToast("❌ 用户名至少2个字符",2200); return; }
-    if(!email){ showToast("❌ 请输入邮箱",2200); return; }
-    if(!code){ showToast("❌ 请输入验证码",2200); return; }
-    if(!this._regCodeToken){ showToast("❌ 请先获取验证码",2200); return; }
-    showToast("⏳ 正在注册...",1200);
+    if(u.length < 2){ showToast("用户名至少2个字符",2200); return; }
+    if(!email){ showToast("请输入邮箱",2200); return; }
+    if(!code){ showToast("请输入验证码",2200); return; }
+    if(!this._regCodeToken){ showToast("请先获取验证码",2200); return; }
+    showToast("正在注册...",1200);
     const apiRes = await API.register(u, email, this._regCodeToken, code);
     if(apiRes && apiRes.success){
       const user = {name: u, email: email, createdAt: Date.now(), avatar:AVATAR_SET[hashStr(u) % AVATAR_SET.length]};
@@ -3083,10 +3068,10 @@ const app = {
       all[u.toLowerCase()] = user; Users.set(all);
       Session.set(user); this.refreshUser(); this.closeModal("registerModal");
       $("#regCode").value=""; this._regCodeToken=null;
-      showToast("🎉 注册成功，欢迎 "+esc(user.name)+"！", 2500); this.renderHome();
+      showToast("注册成功，"+esc(user.name), 2500); this.renderHome();
     } else {
       const msg = apiRes && apiRes.error ? apiRes.error : "注册失败";
-      showToast("❌ "+msg, 2500);
+      showToast(msg, 2500);
     }
   },
   // 发送验证码（注册/登录通用）
@@ -3114,7 +3099,7 @@ const app = {
     }, 1000);
   },
   async sendCode(email, purpose, btnId){
-    if(!email){ showToast("❌ 请先输入邮箱",2200); return; }
+    if(!email){ showToast("请先输入邮箱",2200); return; }
     const btn=$("#"+btnId);
     if(btn) { btn.disabled=true; btn.textContent="发送中..."; }
     const apiRes = await API.sendCode(email, purpose);
@@ -3128,19 +3113,19 @@ const app = {
       if (apiRes.hint) {
         if (apiRes.dev_mode && apiRes.dev_code) {
           // 开发模式：直接显示验证码 + 提示信息
-          showToast("📧 验证码: "+apiRes.dev_code+" | "+apiRes.hint, 8000);
+          showToast("验证码: "+apiRes.dev_code+" | "+apiRes.hint, 8000);
         } else {
-          showToast("✅ "+apiRes.hint, 3500);
+          showToast(""+apiRes.hint, 3500);
         }
       } else if (apiRes.dev_mode && apiRes.dev_code) {
-        showToast("📧 验证码: "+apiRes.dev_code+"（备用模式）", 6000);
+        showToast("验证码: "+apiRes.dev_code+"（备用模式）", 6000);
       } else {
-        showToast("✅ 验证码已发送到邮箱", 2500);
+        showToast("验证码已发送到邮箱", 2500);
       }
       this.startCodeCountdown(btnId);
     } else {
       const msg = apiRes && apiRes.error ? apiRes.error : "发送失败";
-      showToast("❌ "+msg, 2500);
+      showToast(""+msg, 2500);
       if(btn) { btn.disabled=false; btn.textContent="发送验证码"; }
     }
   },
@@ -3151,7 +3136,7 @@ const app = {
   },
   openProfile(){
     const u = Session.currentUser();
-    if(!u){ showToast("🔐 请先登录", 2200); this.openModal("loginModal"); return; }
+    if(!u){ showToast("请先登录", 2200); this.openModal("loginModal"); return; }
     const body = $("#profileBody");
     const avs = AVATAR_SET.map((e,i)=> `<div class="av-opt ${u.avatar===e?"active":""}" data-emoji="${e}">${e}</div>`).join("")
       + `<label class="av-opt av-custom ${typeof u.avatar==='string' && u.avatar.startsWith('data:')?'active':''}">
@@ -3215,10 +3200,10 @@ const app = {
     const newName = $("#pf_user").value.trim();
     const phone = $("#pf_phone").value.trim();
     const npass = $("#pf_pass").value;
-    if(!newName){ showToast("❌ 用户名不能为空",2200); return; }
+    if(!newName){ showToast("用户名不能为空",2200); return; }
     if(newName.toLowerCase() !== u.name.toLowerCase()){
       const rr = Users.rename(u.name, newName);
-      if(!rr.ok){ showToast("❌ "+rr.msg,2200); return; }
+      if(!rr.ok){ showToast(""+rr.msg,2200); return; }
     }
     let avatar = u.avatar;
     const act = document.querySelector("#avatarPicker .av-opt.active");
@@ -3229,7 +3214,7 @@ const app = {
     const patch = {name:newName,phone,avatar};
     if(npass && npass.length>=4) patch.pass = npass;
     const updated = Users.update(u.name === newName ? u.name : newName, patch);
-    if(updated){ Session.set(updated); this.refreshUser(); this.closeModal("profileModal"); showToast("✅ 个人设置已保存",2200); }
+    if(updated){ Session.set(updated); this.refreshUser(); this.closeModal("profileModal"); showToast("个人设置已保存",2200); }
   },
   openStatsForUser(){
     const u = Session.currentUser(); if(!u) return;
@@ -3249,7 +3234,7 @@ const app = {
   // ========== FEEDBACK (反馈系统) ==========
   openFeedback(){
     const u = Session.currentUser();
-    if(!u){ showToast("🔐 请先登录",2200); this.openModal("loginModal"); return; }
+    if(!u){ showToast("请先登录",2200); this.openModal("loginModal"); return; }
     $("#feedbackMsg").value=""; $("#feedbackCount").textContent="0";
     $("#feedbackFile").value="";
     this.openModal("feedbackModal");
@@ -3278,17 +3263,17 @@ const app = {
     }catch(e){list.innerHTML='<div style="color:var(--text-4);font-size:13px">加载失败</div>'}
   },
   async submitFeedback(){
-    const u=Session.currentUser(); if(!u){showToast("🔐 请先登录",2200);return}
+    const u=Session.currentUser(); if(!u){showToast("请先登录",2200);return}
     const msg=$("#feedbackMsg").value.trim();
-    if(!msg){showToast("❌ 请输入反馈内容",2200);return}
-    if(msg.length>1000){showToast("❌ 反馈内容不能超过1000字",2200);return}
+    if(!msg){showToast("请输入反馈内容",2200);return}
+    if(msg.length>1000){showToast("反馈内容不能超过1000字",2200);return}
     const btn=$("#btnSubmitFeedback");
     btn.disabled=true; btn.textContent="提交中...";
     let attachmentData=null,attachmentName=null,attachmentType=null;
     const fileInput=$("#feedbackFile");
     if(fileInput.files&&fileInput.files[0]){
       const file=fileInput.files[0];
-      if(file.size>500*1024){showToast("❌ 附件不能超过500KB",2200);btn.disabled=false;btn.textContent="📤 提交反馈";return}
+      if(file.size>500*1024){showToast("附件不能超过500KB",2200);btn.disabled=false;btn.textContent="📤 提交反馈";return}
       attachmentName=file.name; attachmentType=file.type;
       attachmentData=await new Promise(res=>{const r=new FileReader();r.onload=()=>res(r.result);r.readAsDataURL(file);});
     }
@@ -3298,11 +3283,11 @@ const app = {
         body:JSON.stringify({username:u.name,message:msg,attachmentData,attachmentName,attachmentType})
       });
       const data=await r.json();
-      if(data.error){showToast("❌ "+data.error,2200);return}
-      showToast("✅ 反馈已提交，管理员会尽快回复",3000);
+      if(data.error){showToast(""+data.error,2200);return}
+      showToast("反馈已提交，管理员会尽快回复",3000);
       $("#feedbackMsg").value="";$("#feedbackCount").textContent="0";$("#feedbackFile").value="";
       this.loadFeedbackHistory();
-    }catch(e){showToast("❌ 网络错误",2200)}
+    }catch(e){showToast("网络错误",2200)}
     finally{btn.disabled=false;btn.textContent="📤 提交反馈";}
   },
 
@@ -3330,7 +3315,7 @@ const app = {
     </div>`;
     $("#btnNewPost").onclick=()=>{
       const u=Session.currentUser();
-      if(!u){showToast("🔐 请先登录再发帖",2200);this.openModal("loginModal");return}
+      if(!u){showToast("请先登录再发帖",2200);this.openModal("loginModal");return}
       const box=$("#communityPostBox");
       box.style.display=box.style.display==="none"?"block":"none";
     };
@@ -3376,7 +3361,7 @@ const app = {
   // 帖子详情页（点击跳转后的页面）
   renderPostDetail(pidx){
     const p = (this._communityPosts||[])[pidx];
-    if(!p){ showToast("❌ 帖子不存在", 2000); this.renderCommunity(); return; }
+    if(!p){ showToast("帖子不存在", 2000); this.renderCommunity(); return; }
     const att=p.attachment_data?(p.attachment_type&&p.attachment_type.startsWith('image')?
       `<img src="${p.attachment_data}" style="max-width:100%;border-radius:10px;margin-top:16px" onclick="window.open(this.src)" />`:
       `<a href="${p.attachment_data}" download="${p.attachment_name||'file'}" style="color:var(--accent);font-size:13px;display:inline-block;margin-top:14px">📎 下载附件：${p.attachment_name||'附件'}</a>`):'';
@@ -3399,16 +3384,16 @@ const app = {
     $("#postBackBtn").onclick = ()=> this.renderCommunity();
   },
   async submitCommunityPost(){
-    const u=Session.currentUser(); if(!u){showToast("🔐 请先登录",2200);return}
+    const u=Session.currentUser(); if(!u){showToast("请先登录",2200);return}
     const content=$("#postContent").value.trim();
-    if(!content){showToast("❌ 请输入内容",2200);return}
-    if(content.length>300){showToast("❌ 内容不能超过300字",2200);return}
+    if(!content){showToast("请输入内容",2200);return}
+    if(content.length>300){showToast("内容不能超过300字",2200);return}
     const btn=$("#btnSubmitPost"); btn.disabled=true; btn.textContent="发布中...";
     let attachmentData=null,attachmentName=null,attachmentType=null;
     const fileInput=$("#postFile");
     if(fileInput.files&&fileInput.files[0]){
       const file=fileInput.files[0];
-      if(file.size>500*1024){showToast("❌ 附件不能超过500KB",2200);btn.disabled=false;btn.textContent="发布";return}
+      if(file.size>500*1024){showToast("附件不能超过500KB",2200);btn.disabled=false;btn.textContent="发布";return}
       attachmentName=file.name; attachmentType=file.type;
       attachmentData=await new Promise(res=>{const r=new FileReader();r.onload=()=>res(r.result);r.readAsDataURL(file);});
     }
@@ -3418,12 +3403,12 @@ const app = {
         body:JSON.stringify({username:u.name,content,attachmentData,attachmentName,attachmentType})
       });
       const data=await r.json();
-      if(data.error){showToast("❌ "+data.error,2200);return}
-      showToast("✅ 发布成功",2000);
+      if(data.error){showToast(""+data.error,2200);return}
+      showToast("发布成功",2000);
       $("#postContent").value="";$("#postCount").textContent="0";$("#postFile").value="";
       $("#communityPostBox").style.display="none";
       this.loadCommunityPosts();
-    }catch(e){showToast("❌ 网络错误",2200)}
+    }catch(e){showToast("网络错误",2200)}
     finally{btn.disabled=false;btn.textContent="发布";}
   },
 
