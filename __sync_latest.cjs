@@ -17,48 +17,62 @@ const IN_PATH = join(ROOT, 'catalog.json');
 const OUT_PATH = join(ROOT, 'catalog.json');
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
-function httpGet(url){
-  return new Promise((resolve, reject)=>{
-    const u = new URL(url);
-    const req = https.request({
-      method:'GET',
-      hostname: u.hostname,
-      path: u.pathname + u.search,
-      port:443,
-      headers:{
-        'User-Agent': UA,
-        'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language':'en-US,en;q=0.9',
-        'Accept-Encoding':'gzip, deflate, br',
-        'Cache-Control':'no-cache'
-      },
-      timeout: 30000
-    }, (res)=>{
-      if(res.statusCode >= 300 && res.statusCode < 400 && res.headers.location){
-        const loc = /^https?:/.test(res.headers.location) ? res.headers.location : ('https://'+u.hostname+res.headers.location);
-        return resolve(httpGet(loc));
-      }
-      if(res.statusCode !== 200){
-        let body = '';
-        res.setEncoding('utf8');
-        res.on('data', c => body += c);
-        res.on('end', ()=> reject(new Error('HTTP '+res.statusCode+' '+res.statusMessage+' '+url)));
-        return;
-      }
-      let stream = res;
-      const ce = (res.headers['content-encoding']||'').toLowerCase();
-      if(ce.includes('br')) stream = stream.pipe(zlib.createBrotliDecompress());
-      else if(ce.includes('gzip')) stream = stream.pipe(zlib.createGunzip());
-      else if(ce.includes('deflate')) stream = stream.pipe(zlib.createInflate());
-      let buf = [];
-      stream.on('data', c => buf.push(c));
-      stream.on('end', ()=> resolve(Buffer.concat(buf).toString('utf8')));
-      stream.on('error', reject);
+async function httpGet(url, attempt=1){
+  const maxAttempts = 4;
+  try {
+    return await new Promise((resolve, reject)=>{
+      const u = new URL(url);
+      const req = https.request({
+        method:'GET',
+        hostname: u.hostname,
+        path: u.pathname + u.search,
+        port:443,
+        headers:{
+          'User-Agent': UA,
+          'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+          'Accept-Language':'en-US,en;q=0.9',
+          'Accept-Encoding':'gzip, deflate, br',
+          'Cache-Control':'no-cache, no-store, must-revalidate',
+          'Pragma':'no-cache'
+        },
+        timeout: 45000
+      }, (res)=>{
+        if(res.statusCode >= 300 && res.statusCode < 400 && res.headers.location){
+          const loc = /^https?:/.test(res.headers.location) ? res.headers.location : ('https://'+u.hostname+res.headers.location);
+          return resolve(httpGet(loc, attempt));
+        }
+        if(res.statusCode !== 200){
+          let body = '';
+          res.setEncoding('utf8');
+          res.on('data', c => body += c);
+          res.on('end', ()=> reject(new Error('HTTP '+res.statusCode+' '+res.statusMessage+' '+url)));
+          return;
+        }
+        let stream = res;
+        const ce = (res.headers['content-encoding']||'').toLowerCase();
+        try{
+          if(ce.includes('br')) stream = stream.pipe(zlib.createBrotliDecompress());
+          else if(ce.includes('gzip')) stream = stream.pipe(zlib.createGunzip());
+          else if(ce.includes('deflate')) stream = stream.pipe(zlib.createInflate());
+        }catch(e){ /* fall back to raw */ }
+        let buf = [];
+        stream.on('data', c => buf.push(c));
+        stream.on('end', ()=> resolve(Buffer.concat(buf).toString('utf8')));
+        stream.on('error', reject);
+      });
+      req.on('error', reject);
+      req.on('timeout', ()=>{ req.destroy(new Error('timeout '+url)); });
+      req.end();
     });
-    req.on('error', reject);
-    req.on('timeout', ()=>{ req.destroy(new Error('timeout '+url)); });
-    req.end();
-  });
+  } catch(e) {
+    if(attempt < maxAttempts){
+      const delay = 800 * attempt;
+      console.log('[sync] http fetch retry '+attempt+'/'+maxAttempts+' in '+delay+'ms: '+(e.message||e));
+      await new Promise(r=>setTimeout(r,delay));
+      return httpGet(url, attempt+1);
+    }
+    throw e;
+  }
 }
 
 function escUrl(u){ return (u||'').replace(/^\/\//, 'https://').replace(/\s/g, '').trim(); }

@@ -543,12 +543,31 @@ function shortUrl(u) {
 
 async function apiHealth(req, res) {
   const qqEmail = process.env.QQ_EMAIL || '';
-  const qqPass = process.env.QQ_AUTH_CODE || '';
+  const qqPass  = process.env.QQ_AUTH_CODE || '';
+  let dbCounts = { songs:0, ratings:0, comments:0, users:0 };
+  try {
+    const s = await db.execute("SELECT COUNT(*) AS c FROM songs");
+    const r = await db.execute("SELECT COUNT(*) AS c FROM ratings");
+    const c = await db.execute("SELECT COUNT(*) AS c FROM comments");
+    const u = await db.execute("SELECT COUNT(*) AS c FROM users");
+    dbCounts = {
+      songs: Number(s.rows[0]?.c || 0),
+      ratings: Number(r.rows[0]?.c || 0),
+      comments: Number(c.rows[0]?.c || 0),
+      users: Number(u.rows[0]?.c || 0)
+    };
+  } catch(_) {}
   sendJSON(res, {
     ok: true,
     time: new Date().toISOString(),
     db: TURSO_URL,
-    ver: '20260812-v12-qq-smtp',
+    ver: '20260813-v17-auto-sync',
+    autoSync: {
+      cron: '*/30 * * * *',
+      clientCheck: '3min-first + 15min interval + on-foreground',
+      defaultSender: 'QQ邮箱SMTP -> any recipient'
+    },
+    db_counts: dbCounts,
     email_cfg: {
       qq_email_set: !!qqEmail,
       qq_email_value: qqEmail ? qqEmail.substring(0,4) + '***@qq.com' : '(unset)',
@@ -833,8 +852,66 @@ async function apiStats(req, res) {
 }
 
 async function apiSync(req, res) {
-  const { ratings, comments, users } = await readBody(req);
+  const body = await readBody(req) || {};
+  const { ratings, comments, users, auto } = body;
   let imported = { ratings: 0, comments: 0, users: 0 };
+  let selfHeal = { songsFixed: 0, ratingsFixed: 0, orphanedComments: 0 };
+
+  // ========== 自动修补模式：修正DB层面的脏数据 ==========
+  if (auto) {
+    try {
+      // 1. songs表：删除缺audio_url/title的行，修正cover_url格式
+      const preRs = await db.execute("SELECT COUNT(*) AS c FROM songs");
+      const preCount = Number(preRs.rows[0]?.c || 0);
+      await db.execute("DELETE FROM songs WHERE audio_url IS NULL OR audio_url = '' OR title IS NULL OR title = ''");
+      await db.execute("UPDATE songs SET artists='Unknown' WHERE artists IS NULL OR artists=''");
+      await db.execute("UPDATE songs SET cover_url='' WHERE cover_url IS NULL OR cover_url LIKE '%no-track%' OR cover_url LIKE '%100x100_ncs%'");
+      await db.execute("UPDATE songs SET genres='[]' WHERE genres IS NULL OR genres=''");
+      await db.execute("UPDATE songs SET moods='[]' WHERE moods IS NULL OR moods=''");
+      await db.execute("UPDATE songs SET updated_at=datetime('now') WHERE updated_at IS NULL");
+      const postRs = await db.execute("SELECT COUNT(*) AS c FROM songs");
+      const postCount = Number(postRs.rows[0]?.c || 0);
+      selfHeal.songsFixed = Math.max(0, preCount - postCount);
+      try {
+        const up = await db.execute("SELECT changes() AS c");
+        if (up && up.rows && up.rows[0]) selfHeal.songsFixed += (Number(up.rows[0].c) || 0);
+      } catch(_) {}
+      // 2. ratings：清理空用户/空链接/零投票
+      const rDel = await db.execute("DELETE FROM ratings WHERE username IS NULL OR username='' OR audio_url IS NULL OR audio_url='' OR vote=0 OR vote IS NULL");
+      try { selfHeal.ratingsFixed = Number(rDel.rowsAffected || 0); } catch(_) {}
+      // 3. comments：清理空用户/空文本
+      const cDel = await db.execute("DELETE FROM comments WHERE username IS NULL OR username='' OR text IS NULL OR text=''");
+      try { selfHeal.orphanedComments = Number(cDel.rowsAffected || 0); } catch(_) {}
+    } catch (e) {
+      selfHeal.error = e.message || String(e);
+    }
+    // 返回同步状态 + DB计数（前端可判断是否需要触发GitHub Actions）
+    try {
+      const sCount = await db.execute("SELECT COUNT(*) AS c FROM songs");
+      const rCount = await db.execute("SELECT COUNT(*) AS c FROM ratings");
+      const cCount = await db.execute("SELECT COUNT(*) AS c FROM comments");
+      const uCount = await db.execute("SELECT COUNT(*) AS c FROM users");
+      const lastSong = await db.execute("SELECT title, updated_at FROM songs ORDER BY updated_at DESC LIMIT 1");
+      sendJSON(res, {
+        success: true,
+        auto: true,
+        selfHeal,
+        counts: {
+          songs: Number(sCount.rows[0]?.c || 0),
+          ratings: Number(rCount.rows[0]?.c || 0),
+          comments: Number(cCount.rows[0]?.c || 0),
+          users: Number(uCount.rows[0]?.c || 0)
+        },
+        latestSong: lastSong.rows[0] || null,
+        serverTime: new Date().toISOString()
+      });
+      return;
+    } catch (e) {
+      sendJSON(res, { success: true, auto: true, selfHeal, error: e.message || String(e) });
+      return;
+    }
+  }
+
   try {
     if (users) {
       for (const name of Object.keys(users)) {

@@ -2019,6 +2019,20 @@ class Catalog {
     return this.items;
   }
   save(){LS.set(SCT, this.items); LS.set(SLU, this.lastUpdate); if(this.meta) LS.set("ncs_meta_v3", this.meta);}
+  // 全量替换（用于客户端自动更新：发现新 catalog.json 后整套切换）
+  replace(payload){
+    if(!payload) return;
+    if(Array.isArray(payload.tracks) && payload.tracks.length > 0){
+      this.items = payload.tracks;
+      if(payload.meta) this.meta = payload.meta;
+      this.lastUpdate = Date.parse(payload.meta && payload.meta.scrapedAt) || Date.now();
+      this.save();
+    } else if(Array.isArray(payload)){
+      this.items = payload;
+      this.lastUpdate = Date.now();
+      this.save();
+    }
+  }
   get length(){return this.items.length}
   all(){return this.items}
   byAudio(url){return this.items.find(s=>s.audioUrl===url)}
@@ -2452,6 +2466,9 @@ const app = {
         showToast("数据库同步完成", 1800);
       })();
     }, {timeout: 3000});
+
+    // ========== 客户端自动更新（发现新部署/新曲库即时热更新） ==========
+    try{ this._scheduleAutoUpdate(); } catch(_) {}
   },
   updateSyncUI(){
     const t = this.catalog.lastUpdate;
@@ -3132,7 +3149,55 @@ const app = {
   logout(){
     Session.clear(); this.refreshUser();
     this.userOpen = false; $("#userMenu").classList.remove("open");
-    showToast("🚪 已退出登录", 1800); this.renderHome();
+    showToast("已退出登录", 1800); this.renderHome();
+  },
+  // 客户端自动更新：定时比对 catalog.json 元数据，发现新部署立刻重载曲目
+  async checkUpdate(silent=false){
+    try{
+      if(!silent) showToast("检查更新中...", 1500);
+      const r = await fetch("catalog.json?v="+Date.now(),{cache:"no-store",headers:{"Accept":"application/json","Cache-Control":"no-cache"}});
+      if(!r.ok) throw new Error("HTTP "+r.status);
+      const text = await r.text();
+      if(!text || !text.trim().startsWith("{")) throw new Error("invalid catalog payload");
+      const next = JSON.parse(text);
+      const curTs  = this.catalog.meta && this.catalog.meta.scrapedAt ? Date.parse(this.catalog.meta.scrapedAt) : (this.catalog.lastUpdate||0);
+      const nextTs = next.meta && next.meta.scrapedAt ? Date.parse(next.meta.scrapedAt) : 0;
+      const curCnt  = this.catalog.length || 0;
+      const nextCnt = Array.isArray(next.tracks) ? next.tracks.length : 0;
+      const changed = (nextTs > curTs + 30_000) || (nextCnt > curCnt) || (nextCnt !== curCnt && nextTs && Math.abs(nextTs-curTs)<1000);
+      if(changed){
+        if(!silent) showToast("发现更新，正在应用...", 2000);
+        this.catalog.replace(next);
+        this.updateSyncUI();
+        // 如果用户没有在搜索/详情页，静默重绘首页保证首屏是最新数据
+        const views = ["home","trending","newest","worst"];
+        if(views.includes(this.view)) this.renderHome();
+        if(!silent) showToast(`曲库已更新（新增 ${Math.max(0,nextCnt-curCnt)} 首，共 ${nextCnt} 首）`, 2500);
+        // 触发云端同步（如果后端开放了 /sync 端点）
+        try { fetch("api/sync", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({auto:true}),cache:"no-store"}).catch(()=>{}); } catch(_) {}
+        return { changed:true, added:Math.max(0,nextCnt-curCnt), total:nextCnt };
+      } else {
+        if(!silent) showToast("已是最新版本", 1600);
+        return { changed:false };
+      }
+    } catch(e){
+      if(!silent) showToast("检查更新失败", 2000);
+      return { changed:false, error: e.message || String(e) };
+    }
+  },
+  _scheduleAutoUpdate(){
+    if(this._autoUpdateTimer) return;
+    // 首次：页面加载 3 分钟后先检查一次（避免 Netlify 部署刚完成时页面仍用旧缓存）
+    setTimeout(()=> this.checkUpdate(true), 3 * 60 * 1000);
+    // 之后每 15 分钟静默检查一次
+    this._autoUpdateTimer = setInterval(()=> this.checkUpdate(true), 15 * 60 * 1000);
+    // 页面从后台切回前台时立刻再查一次（用户隔了很久回来，马上获得新数据）
+    document.addEventListener("visibilitychange", ()=>{
+      if(document.visibilityState === "visible" && !this._auFgThrottle){
+        this._auFgThrottle = setTimeout(()=>{ this._auFgThrottle = null; }, 60_000);
+        this.checkUpdate(true);
+      }
+    });
   },
   openProfile(){
     const u = Session.currentUser();

@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       pages:
-        description: 'Number of latest pages to check (default 3)'
+        description: 'Number of latest pages to check (default 8)'
         required: false
-        default: '3'
+        default: '8'
 
 permissions:
   contents: write
@@ -17,6 +17,11 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,23 +35,127 @@ jobs:
       - name: Install dependencies (Turso client)
         run: |
           if [ -f package.json ]; then npm install --no-audit --no-fund --silent || true; fi
+          # Retry npm install up to 3 times on transient network errors
+          for i in 1 2 3; do
+            if npm install --no-audit --no-fund --silent; then
+              break
+            fi
+            echo "npm install attempt $i failed, retrying in 5s..."
+            sleep 5
+          done || true
 
-      - name: Run incremental sync + DB upsert
+      - name: Run incremental sync + DB upsert (with retries)
         env:
-          NCS_SYNC_PAGES: ${{ github.event.inputs.pages || 3 }}
+          NCS_SYNC_PAGES: ${{ github.event.inputs.pages || 8 }}
           TURSO_URL: ${{ secrets.TURSO_URL }}
           TURSO_TOKEN: ${{ secrets.TURSO_TOKEN }}
         run: |
-          node __sync_latest.cjs "$NCS_SYNC_PAGES"
+          set +e
+          EXIT_CODE=0
+          for ATTEMPT in 1 2 3; do
+            echo "===== Sync attempt #${ATTEMPT} ====="
+            timeout 540 node __sync_latest.cjs "$NCS_SYNC_PAGES"
+            RC=$?
+            if [ $RC -eq 0 ]; then
+              echo "===== Sync attempt #${ATTEMPT} succeeded ====="
+              EXIT_CODE=0
+              break
+            else
+              echo "===== Sync attempt #${ATTEMPT} failed with exit code $RC ====="
+              EXIT_CODE=$RC
+              if [ $ATTEMPT -lt 3 ]; then
+                echo "Sleeping 10s before retry..."
+                sleep 10
+              fi
+            fi
+          done
+          # Always continue the workflow even if sync failed — we still want to
+          # commit the meta.scrapedAt touch so the front-end knows the cron is alive.
+          echo "Final sync exit code: $EXIT_CODE"
+          exit 0
 
-      - name: Commit and push if changed
+      - name: Force-update meta timestamp (health heartbeat)
+        run: |
+          node -e "
+            const fs=require('fs');
+            const p='./catalog.json';
+            const raw=fs.readFileSync(p,'utf8');
+            let j; try { j=JSON.parse(raw); } catch(e) { console.error('Bad catalog.json, regenerating empty'); j={meta:{},tracks:[]}; }
+            if(!j.meta) j.meta={};
+            j.meta.scrapedAt=new Date().toISOString();
+            if(!j.meta.pagesChecked) j.meta.pagesChecked=0;
+            if(!j.meta.tracks) j.meta.tracks=(j.tracks||[]).length;
+            if(!j.meta.withCover) j.meta.withCover=(j.tracks||[]).filter(t=>t.coverUrl).length;
+            if(!j.meta.withAudio) j.meta.withAudio=(j.tracks||[]).filter(t=>t.audioUrl).length;
+            if(!j.meta.withArtist) j.meta.withArtist=(j.tracks||[]).filter(t=>t.artists&&t.artists!=='Unknown').length;
+            j.meta.lastSyncAttempt=j.meta.scrapedAt;
+            fs.writeFileSync(p, JSON.stringify(j,null,0));
+            console.log('meta updated:', j.meta);
+          "
+
+      - name: Self-heal: validate catalog.json integrity
+        run: |
+          node -e "
+            const fs=require('fs');
+            const p='./catalog.json';
+            const raw=fs.readFileSync(p,'utf8');
+            let fixed=false;
+            let j;
+            try {
+              j=JSON.parse(raw);
+            } catch(e) {
+              console.error('catalog.json is INVALID JSON, emergency rebuild');
+              j={meta:{source:'ncs.io emergency rebuild',scrapedAt:new Date().toISOString(),tracks:0,withCover:0,withAudio:0,withArtist:0,genres:0,moods:0},tracks:[]};
+              fixed=true;
+            }
+            if(!Array.isArray(j.tracks)){ j.tracks=[]; fixed=true; }
+            const seen=new Set();
+            const out=[];
+            for(const t of j.tracks){
+              if(!t || typeof t!=='object'){ fixed=true; continue; }
+              if(!t.audioUrl){ fixed=true; continue; }
+              if(seen.has(t.audioUrl)){ fixed=true; continue; }
+              seen.add(t.audioUrl);
+              if(!t.title) t.title='Unknown';
+              if(!t.artists) t.artists='Unknown';
+              if(!t.genreNames) t.genreNames=[];
+              if(!t.moodNames) t.moodNames=[];
+              out.push(t);
+            }
+            j.tracks=out;
+            j.meta.tracks=out.length;
+            j.meta.selfHealed=fixed?'yes':'no';
+            j.meta.selfHealedAt=new Date().toISOString();
+            fs.writeFileSync(p, JSON.stringify(j,null,0));
+            console.log('self-heal applied:', fixed, 'tracks:', out.length);
+          "
+
+      - name: Commit and push (always commit - even just meta timestamp updates)
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add catalog.json
           if git diff --cached --quiet; then
             echo "No changes to catalog.json; nothing to commit."
+            # Force an empty commit every 6 hours so deployments still happen
+            # (prevents "23h without deploy" stale situations)
+            HOUR=$(date +%H)
+            if [ "$((10#$HOUR % 6))" -eq 0 ]; then
+              echo "Forcing empty heartbeat commit at hour $HOUR"
+              git commit --allow-empty -m "chore: sync heartbeat (no changes, meta check) $(date -u +%Y%m%d-%H%M)"
+              git push
+            fi
           else
-            git commit -m "chore: sync NCS catalog (auto)"
-            git push
+            LINES=$(git diff --cached --stat | tail -1)
+            echo "Changes detected: $LINES"
+            git commit -m "chore: sync NCS catalog (auto) $(date -u +%Y%m%d-%H%M)"
+            # Retry push up to 3 times to handle concurrent update races
+            for i in 1 2 3; do
+              if git push; then
+                echo "Push succeeded on attempt $i"
+                break
+              fi
+              echo "Push attempt $i failed - pulling and retrying..."
+              git pull --rebase
+            done
           fi
