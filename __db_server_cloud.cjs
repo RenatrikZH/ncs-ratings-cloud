@@ -307,6 +307,22 @@ function resolveSmtpConfig(toEmail) {
       }
     }
   }
+  // 2b. 默认发件账户（优先QQ邮箱）：只要配置了QQ_EMAIL+QQ_AUTH_CODE，
+  //     就用QQ邮箱SMTP作为默认发件人向**任何**邮箱发送（收件人不限于@qq.com）
+  {
+    const qqUser = process.env.QQ_EMAIL     || '';
+    const qqPass = process.env.QQ_AUTH_CODE || '';
+    if (qqUser && qqPass) {
+      return {
+        name: 'QQ邮箱',
+        host: 'smtp.qq.com',
+        port: 465,
+        secure: true,
+        auth: { user: qqUser, pass: qqPass },
+        from: `NCS Ratings <${qqUser}>`
+      };
+    }
+  }
   // 3. Resend API（付费方案，需配置 API_KEY）
   const resendKey = process.env.RESEND_API_KEY || '';
   if (resendKey) {
